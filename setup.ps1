@@ -54,10 +54,27 @@ function Ensure-Dir($Path) {
 function Test-Command($Name) { $null -ne (Get-Command $Name -ErrorAction SilentlyContinue) }
 
 # ————— cute adaptive progress bar —————
-$global:DotfilesProgressTotal = 17
+$global:DotfilesProgressTotal = 18
 $global:DotfilesProgressCurrent = 0
 $global:DotfilesProgressErrors = 0
 $global:DotfilesProgressStart = Get-Date
+
+# ————— security — pinned hashes (verify before exec) —————
+$global:ExpectedHashes = @{
+  "OOSU10.exe"      = "1AD8CDC324A79AC37A50858FDDCD28EB7491459114F0DA514C4750B08B115103" # 79930408 bytes, dl5.oo-software.com
+  "ani-cli"         = "51D1F84EA1B02490C2F672C911029D1CA87AC9A1060902CA80AFA3BF982A7CA1" # 27689 bytes, pystardust/ani-cli 5.0.4
+  "wallpaper.jpg"   = "07386AE035C39A786EDBBF30FD2C775B956FFDB25B8B18BBE961C2480619480F" # 5281757 bytes, Seongjin Park
+  "OOSU10.cfg"      = "8DF16D34BA300F925FBD271F691F43AF4C98926671BCAC1172608BB198396E7E" # 45077 bytes, XML RecentStates
+  "ooshutup10.cfg"  = "91534D53D69C668D544656494AA9AF4BC19BFF66841844FCA18A09DD814CAACE" # 3261 bytes, P001 + format, recommended - clipboard
+}
+$global:MullvadFamilyIPv4 = @("194.242.2.6")
+$global:MullvadFamilyIPv6 = @("2a07:e340::6")
+$global:MullvadFamilyDohTemplate = "https://family.dns.mullvad.net/dns-query"
+function Test-Hash {
+  param([string]$Path, [string]$Expected)
+  if (-not (Test-Path $Path)) { return $false }
+  try { $h = (Get-FileHash -Path $Path -Algorithm SHA256).Hash; return $h -eq $Expected } catch { return $false }
+}
 
 function Get-TerminalWidth {
   try {
@@ -561,41 +578,80 @@ if (-not $NoSyncthing) {
     Write-Ok "Startup shortcut → $lnk"
   }
 
-  # Scheduled task at logon
+  # Scheduled task at logon (hardened: Limited, not Highest, verify exe)
   $taskName = "Syncthing"
   $existing = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-  if ($existing) { Write-Ok "Scheduled task '$taskName' already exists ($($existing.State))" }
+  if ($existing) {
+    # Check if existing is Highest — downgrade to Limited
+    $isHighest = $false
+    try { $isHighest = ($existing.Principal.RunLevel -eq "Highest") } catch {}
+    if ($isHighest) {
+      Write-Warn "Syncthing task is Highest — downgrading to Limited"
+      Invoke-Maybe "Downgrade Syncthing task to Limited" {
+        try {
+          Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+          $action2 = New-ScheduledTaskAction -Execute $syncthingLink -Argument "--no-browser --no-restart" -WorkingDirectory "$env:LOCALAPPDATA\Syncthing"
+          $trigger2 = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME; $trigger2.Delay = "PT30S"
+          $settings2 = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit 0 -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1); $settings2.Hidden = $true
+          $principal2 = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
+          Register-ScheduledTask -TaskName $taskName -Action $action2 -Trigger $trigger2 -Settings $settings2 -Principal $principal2 -Description "Syncthing autostart at logon (dotfiles) Limited" | Out-Null
+          Write-Ok "Downgraded Syncthing task to Limited"
+        } catch { Write-Warn "Downgrade failed: $_" }
+      }
+    } else { Write-Ok "Scheduled task '$taskName' already exists ($($existing.State), Limited)" }
+  }
   else {
-    Invoke-Maybe "Create ScheduledTask '$taskName' (AtLogOn +30s, hidden)" {
+    Invoke-Maybe "Create ScheduledTask '$taskName' (AtLogOn +30s, hidden, Limited)" {
+      # Verify exe signature before persistence
+      try {
+        $sig = Get-AuthenticodeSignature -FilePath $syncthingLink -ErrorAction SilentlyContinue
+        if ($sig -and $sig.Status -ne "Valid") { Write-Warn "Syncthing exe signature $($sig.Status) — creating task anyway" }
+      } catch {}
       $action = New-ScheduledTaskAction -Execute $syncthingLink -Argument "--no-browser --no-restart" -WorkingDirectory "$env:LOCALAPPDATA\Syncthing"
       $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
       $trigger.Delay = "PT30S"
       $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit 0 -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
       $settings.Hidden = $true
-      $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Highest
+      $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
       try {
-        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description "Syncthing autostart at logon (dotfiles)" | Out-Null
-        Write-Ok "Scheduled task '$taskName' created"
+        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description "Syncthing autostart at logon (dotfiles) Limited" | Out-Null
+        Write-Ok "Scheduled task '$taskName' created (Limited)"
       } catch {
-        Write-Warn "Principal failed, retry without: $_"
+        Write-Warn "Principal Limited failed, retry without: $_"
         Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Description "Syncthing autostart at logon" | Out-Null
         Write-Ok "Scheduled task '$taskName' created (fallback)"
       }
     }
   }
 
-  # Firewall
+  # Firewall (hardened: Private only, not Any)
   $fw = Get-NetFirewallRule -DisplayName "Syncthing*" -ErrorAction SilentlyContinue
-  if ($fw) { Write-Ok "Firewall rule already present: $($fw.DisplayName -join ', ')" }
-  else {
-    Invoke-Maybe "Allow Syncthing through firewall" {
+  if ($fw) {
+    $needsUpdate = $fw | Where-Object { $_.Profile -match "Any|Public" -or $_.Profile -ne "Private" }
+    if ($needsUpdate) {
+      Write-Warn "Syncthing firewall rule is Any/Public — tightening to Private"
+      Invoke-Maybe "Set Syncthing firewall Private only" {
+        try {
+          $targetForFw = $syncthingExe; if (-not $targetForFw) { $targetForFw = $syncthingLink }
+          if (Test-Path $syncthingLink) { try { $t = (Get-Item $syncthingLink).Target; if ($t) { $targetForFw = @($t)[0] } } catch {} }
+          $targetForFw = [string]$targetForFw
+          Remove-NetFirewallRule -DisplayName "Syncthing*" -ErrorAction SilentlyContinue
+          New-NetFirewallRule -DisplayName "Syncthing" -Direction Inbound -Program $targetForFw -Action Allow -Profile Private -Description "Allow Syncthing (dotfiles) Private only" | Out-Null
+          Write-Ok "Firewall tightened to Private for $targetForFw"
+        } catch { Write-Warn "Firewall tighten failed: $_" }
+      }
+    } else { Write-Ok "Firewall rule already Private: $($fw.DisplayName -join ', ')" }
+  } else {
+    Invoke-Maybe "Allow Syncthing through firewall (Private only)" {
       $targetForFw = $syncthingExe
       if (-not $targetForFw) { $targetForFw = $syncthingLink }
       try {
-        # Resolve to real exe for firewall
-        if (Test-Path $syncthingLink) { try { $targetForFw = (Get-Item $syncthingLink).Target } catch {} }
-        New-NetFirewallRule -DisplayName "Syncthing" -Direction Inbound -Program $targetForFw -Action Allow -Profile Any -Description "Allow Syncthing (dotfiles)" | Out-Null
-        Write-Ok "Firewall rule created for $targetForFw"
+        if (Test-Path $syncthingLink) { try { $t = (Get-Item $syncthingLink).Target; if ($t) { $targetForFw = @($t)[0] } } catch {} }
+        $targetForFw = [string]$targetForFw
+        # Verify signature before allowing
+        try { $sig = Get-AuthenticodeSignature -FilePath $targetForFw -ErrorAction SilentlyContinue; if ($sig.Status -ne "Valid") { Write-Warn "Syncthing exe signature $($sig.Status) — still allowing Private" } } catch {}
+        New-NetFirewallRule -DisplayName "Syncthing" -Direction Inbound -Program $targetForFw -Action Allow -Profile Private -Description "Allow Syncthing (dotfiles) Private only" | Out-Null
+        Write-Ok "Firewall rule created Private for $targetForFw"
       } catch { Write-Warn "Firewall rule failed: $_ — add manually via Windows Firewall" }
     }
   }
@@ -628,6 +684,9 @@ $wallpaperSrc = Join-Path $RepoRoot "wallpaper\wallpaper.jpg"
 $wallpaperDst = "$HOME\Pictures\Seongjin Park.jpg"
 # Also keep a copy at the Transcoded location for reference, but primary is Pictures
 if (Test-Path $wallpaperSrc) {
+  if (-not (Test-Hash $wallpaperSrc $global:ExpectedHashes["wallpaper.jpg"])) {
+    Write-Warn "wallpaper.jpg hash mismatch — expected $($global:ExpectedHashes["wallpaper.jpg"]), got $((Get-FileHash $wallpaperSrc -ErrorAction SilentlyContinue).Hash) — skip wallpaper"
+  } else {
   Ensure-Dir (Split-Path $wallpaperDst -Parent)
   Backup-IfExists $wallpaperDst
   Invoke-Maybe "Copy wallpaper/wallpaper.jpg → $wallpaperDst (Seongjin Park, 5281757 bytes, SHA256 07386AE...)" {
@@ -670,6 +729,7 @@ public class Wallpaper {
       Write-Ok "Wallpaper set → $wallpaperDst (Fill, Seongjin Park)"
     } catch { Write-Warn "Set wallpaper failed: $_ — set manually via Settings > Personalization > Background" }
   }
+  }
 } else {
   Write-Warn "wallpaper/wallpaper.jpg not in repo — skip"
 }
@@ -698,8 +758,9 @@ if (Test-Path $appAssocSrc) {
   # Parse AppAssoc.xml for important ProgIds and apply UserChoice with hash where possible
   try {
     [xml]$xml = Get-Content $appAssocSrc -Raw
-    $important = $xml.DefaultAssociations.Association | Where-Object { $_.Identifier -in @(".jpg",".jpeg",".png",".svg",".gif",".bmp",".pdf",".html",".htm",".xhtml","http","https",".mp4",".mp3",".mkv",".txt") }
-    Write-Info "Per-user: $($important.Count) key associations from AppAssoc.xml (ImageGlass, Brave, Photos, Media, Notepad)"
+    # http/https already handled by Brave default browser + Dism — skip per-user to avoid Unauthorized hash on Win11
+    $important = $xml.DefaultAssociations.Association | Where-Object { $_.Identifier -in @(".jpg",".jpeg",".png",".svg",".gif",".bmp",".pdf",".html",".htm",".xhtml",".mp4",".mp3",".mkv",".txt") }
+    Write-Info "Per-user: $($important.Count) key associations from AppAssoc.xml (ImageGlass, Brave, Photos, Media, Notepad) — http/https via Brave+Dism"
     foreach ($a in $important) {
       $id = $a.Identifier
       $prog = $a.ProgId
@@ -738,38 +799,106 @@ if (Test-Path $appAssocSrc) {
   Write-Warn "defaultapps/AppAssoc.xml not in repo — skip"
 }
 
-# ————— 9. Organization — O&OShutUp10++ (recommended - clipboard) —————
+# ————— 9. DNS — Windows + Brave (Mullvad Family) —————
+Write-Step "DNS — Windows + Brave (Mullvad Family)"
+# Brave DNS already handled via brave/Local State (family.dns.mullvad.net) — verify
+$braveLs = Join-Path $RepoRoot "brave\Local State"
+if (Test-Path $braveLs) {
+  if (Select-String -Path $braveLs -Pattern "family.dns.mullvad.net" -Quiet) { Write-Ok "Brave DNS: Secure → https://family.dns.mullvad.net/dns-query [repo]" }
+}
+# Windows DNS — set for all Up adapters to Mullvad Family (194.242.2.6 / 2a07:e340::6) with DoH
+$dnsV4 = $global:MullvadFamilyIPv4
+$dnsV6 = $global:MullvadFamilyIPv6
+$dohTemplate = $global:MullvadFamilyDohTemplate
+try {
+  $adapters = Get-NetAdapter | Where-Object Status -eq "Up" | Select-Object -ExpandProperty InterfaceIndex
+  if (-not $adapters) { $adapters = @((Get-NetAdapter -Name "Wi-Fi" -ErrorAction SilentlyContinue).InterfaceIndex) | Where-Object { $_ } }
+  foreach ($idx in $adapters) {
+    $alias = (Get-NetAdapter -InterfaceIndex $idx -ErrorAction SilentlyContinue).Name
+    # IPv4
+    Invoke-Maybe "Set DNS IPv4 $alias ($idx) → $($dnsV4 -join ', ') + DoH $dohTemplate" {
+      try {
+        Set-DnsClientServerAddress -InterfaceIndex $idx -ServerAddresses $dnsV4 -ErrorAction Stop
+        # Enable DoH for each server
+        foreach ($s in $dnsV4) {
+          try {
+            # Try Add first (for new Mullvad server not in well-known list), fallback to Set — AllowFallback true to avoid breakage if DoH down
+            try { Add-DnsClientDohServerAddress -ServerAddress $s -DohTemplate $dohTemplate -AllowFallbackToUdp $true -AutoUpgrade $true -ErrorAction Stop } catch {
+              Set-DnsClientDohServerAddress -ServerAddress $s -DohTemplate $dohTemplate -AllowFallbackToUdp $true -AutoUpgrade $true -ErrorAction Stop
+            }
+          } catch { Write-Warn "DoH IPv4 $s failed: $_" }
+        }
+        Write-Ok "DNS IPv4 $alias → $($dnsV4 -join ', ') DoH Family (fallback UDP allowed to avoid breakage)"
+      } catch { Write-Warn "Set DNS IPv4 $alias failed: $_" }
+    }
+    # IPv6
+    if ($dnsV6) {
+      Invoke-Maybe "Set DNS IPv6 $alias ($idx) → $($dnsV6 -join ', ') + DoH $dohTemplate" {
+        try {
+          Set-DnsClientServerAddress -InterfaceIndex $idx -ServerAddresses $dnsV6 -ErrorAction SilentlyContinue
+          foreach ($s in $dnsV6) {
+            try { Add-DnsClientDohServerAddress -ServerAddress $s -DohTemplate $dohTemplate -AllowFallbackToUdp $true -AutoUpgrade $true -ErrorAction Stop } catch {
+              try { Set-DnsClientDohServerAddress -ServerAddress $s -DohTemplate $dohTemplate -AllowFallbackToUdp $true -AutoUpgrade $true -ErrorAction SilentlyContinue } catch {}
+            }
+          }
+          Write-Ok "DNS IPv6 $alias → $($dnsV6 -join ', ')"
+        } catch { Write-Warn "Set DNS IPv6 $alias failed: $_" }
+      }
+    }
+  }
+  if (-not $DryRun) {
+    $cur = Get-DnsClientServerAddress -InterfaceIndex ($adapters | Select-Object -First 1) -AddressFamily IPv4 -ErrorAction SilentlyContinue
+    if ($cur -and ($cur.ServerAddresses -contains $dnsV4[0])) { Write-Ok "Windows DNS verified: $($cur.ServerAddresses -join ', ') on $($cur.InterfaceAlias)" }
+  }
+} catch { Write-Warn "Windows DNS setup failed: $_" }
+
+# ————— 10. Organization — O&OShutUp10++ (recommended - clipboard) —————
 Write-Step "Organization — O&O ShutUp10++"
-$ooCfgSrc = Join-Path $RepoRoot "ooshutup\OOSU10.cfg"
+# Prefer ooshutup10.cfg (P001 + format) for CLI import, fallback to OOSU10.cfg XML
+$ooCfgSrc = Join-Path $RepoRoot "ooshutup\ooshutup10.cfg"
+if (-not (Test-Path $ooCfgSrc)) { $ooCfgSrc = Join-Path $RepoRoot "ooshutup\OOSU10.cfg" }
+$ooCfgName = Split-Path $ooCfgSrc -Leaf
 $ooExeUrl = "https://dl5.oo-software.com/files/ooshutup10/OOSU10.exe"
 $ooExeTmp = Join-Path $env:TEMP "OOSU10.exe"
 if (Test-Path $ooCfgSrc) {
-  # Download OOSU10.exe if missing
-  if (-not (Test-Path $ooExeTmp)) {
-    Invoke-Maybe "Download O&O ShutUp10++ (79 MB) → $ooExeTmp" {
+  # Download OOSU10.exe if missing (with SHA256 pin)
+  if (-not (Test-Path $ooExeTmp) -or -not (Test-Hash $ooExeTmp $global:ExpectedHashes["OOSU10.exe"])) {
+    if (Test-Path $ooExeTmp) { Write-Warn "OOSU10.exe hash mismatch — re-downloading"; Remove-Item $ooExeTmp -Force -ErrorAction SilentlyContinue }
+    Invoke-Maybe "Download O&O ShutUp10++ (79 MB) → $ooExeTmp [SHA256 $($global:ExpectedHashes["OOSU10.exe"].Substring(0,12))…]" {
       try {
         Invoke-WebRequest -Uri $ooExeUrl -OutFile $ooExeTmp -UseBasicParsing -TimeoutSec 60
-        Write-Ok "Downloaded OOSU10.exe $((Get-Item $ooExeTmp).Length) bytes"
+        if (-not (Test-Hash $ooExeTmp $global:ExpectedHashes["OOSU10.exe"])) {
+          throw "SHA256 mismatch for OOSU10.exe — expected $($global:ExpectedHashes["OOSU10.exe"]), got $((Get-FileHash $ooExeTmp).Hash)"
+        }
+        Write-Ok "Downloaded OOSU10.exe $((Get-Item $ooExeTmp).Length) bytes [hash ok]"
       } catch { Write-Warn "Download OOSU10.exe failed: $_ — download manually from https://www.oo-software.com/en/shutup10" }
     }
-  } else { Write-Ok "OOSU10.exe already at $ooExeTmp" }
+  } else { Write-Ok "OOSU10.exe already at $ooExeTmp [hash ok]" }
+  # Verify cfg hash before apply (support both file names)
+  $expectedCfgHash = $global:ExpectedHashes[$ooCfgName]
+  if (-not $expectedCfgHash) { $expectedCfgHash = $global:ExpectedHashes["ooshutup10.cfg"] }
+  if (-not (Test-Hash $ooCfgSrc $expectedCfgHash)) {
+    Write-Warn "$ooCfgName hash mismatch — expected $expectedCfgHash, got $((Get-FileHash $ooCfgSrc -ErrorAction SilentlyContinue).Hash) — not applying (repo may be outdated)"
+  } else {
   # Apply config (requires admin)
   $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
   if (-not $isAdmin) { Write-Warn "O&O ShutUp needs admin — run setup as admin to apply organization settings" }
-  Invoke-Maybe "Apply O&O ShutUp10++ recommended (except clipboard) via OOSU10.cfg /quiet" {
+  Invoke-Maybe "Apply O&O ShutUp10++ recommended (except clipboard) via $ooCfgName /quiet" {
     try {
       if (-not (Test-Path $ooExeTmp)) { throw "OOSU10.exe not found at $ooExeTmp" }
-      $cfgTmp = Join-Path $env:TEMP "OOSU10.cfg"
+      $cfgTmp = Join-Path $env:TEMP $ooCfgName
       Copy-Item -LiteralPath $ooCfgSrc -Destination $cfgTmp -Force
-      # OOSU10 CLI: OOSU10.exe <cfg> /quiet  (also supports /apply)
+      # OOSU10 CLI: OOSU10.exe <cfg> /quiet — cfg must be ooshutup10.cfg (P001 + format), not OOSU10.cfg XML
       $proc = Start-Process -FilePath $ooExeTmp -ArgumentList "`"$cfgTmp`" /quiet" -Wait -PassThru -WindowStyle Hidden -ErrorAction Stop
-      if ($proc.ExitCode -eq 0) { Write-Ok "O&O ShutUp10++ applied (recommended - clipboard) — restart recommended" }
-      else { Write-Warn "OOSU10.exe exit $($proc.ExitCode) — check GUI: $ooExeTmp" }
+      if ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010) { Write-Ok "O&O ShutUp10++ applied (recommended - clipboard) — restart recommended" }
+      elseif ($proc.ExitCode -eq 52) { Write-Ok "O&O ShutUp10++ already applied (exit 52) — no change" }
+      else { Write-Warn "OOSU10.exe exit $($proc.ExitCode) — check GUI: $ooExeTmp (try running manually: OOSU10.exe $ooCfgName /quiet)" }
     } catch { Write-Warn "O&O apply failed: $_" }
   }
-  Write-Info "Config: ooshutup/OOSU10.cfg 45077 bytes, RecentStates 2026-09-06T03:00:11Z, ~150 settings true"
+  Write-Info "Config: ooshutup/$ooCfgName 45077/3261 bytes, RecentStates 2026-09-06T03:00:11Z, ~150 settings true (clipboard excluded)"
+  }
 } else {
-  Write-Warn "ooshutup/OOSU10.cfg not in repo — skip organization settings"
+  Write-Warn "ooshutup/$ooCfgName not in repo — skip organization settings"
 }
 
 # ————— 10. ani-cli — anime via mpv —————
@@ -806,6 +935,9 @@ if ((Test-Path $mpvSrc) -and -not (Test-Path $mpvDstBin)) {
   }
 }
 if (Test-Path $aniSrc) {
+  if (-not (Test-Hash $aniSrc $global:ExpectedHashes["ani-cli"])) {
+    Write-Warn "ani-cli hash mismatch — expected $($global:ExpectedHashes["ani-cli"]), got $((Get-FileHash $aniSrc -ErrorAction SilentlyContinue).Hash) — skip"
+  } else {
   Invoke-Maybe "Copy ani-cli → $localBin\ani-cli (plus .ps1/.cmd wrappers)" {
     Copy-Item -LiteralPath $aniSrc -Destination (Join-Path $localBin "ani-cli") -Force
     Copy-Item -LiteralPath (Join-Path $aniSrcDir "ani-cli.ps1") -Destination (Join-Path $localBin "ani-cli.ps1") -Force -ErrorAction SilentlyContinue
@@ -820,6 +952,7 @@ if (Test-Path $aniSrc) {
       $out = & "C:\Program Files\Git\usr\bin\bash.exe" -l -c "bash ~/.local/bin/ani-cli --help 2>&1 | head -n 3" 2>&1 | Out-String
       if ($out -match "ani-cli") { Write-Ok "ani-cli verified: $($out.Split("`n")[0].Trim())" } else { Write-Warn "ani-cli help check failed" }
     } catch { Write-Warn "ani-cli verify failed: $_" }
+  }
   }
 } else {
   Write-Warn "ani-cli/ani-cli not in repo — skip"
@@ -840,8 +973,16 @@ else {
   Write-Host "   Fastfetch: ~/.config/fastfetch" -ForegroundColor Green
   Write-Host "   Terminal: %LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal…\LocalState\settings.json" -ForegroundColor Green
   Write-Host "   Syncthing GUI: http://127.0.0.1:8384  |  Sync folder: $HOME\Sync" -ForegroundColor Green
+  Write-Host "   Wallpaper: $HOME\Pictures\Seongjin Park.jpg (Mullvad DoH Family)" -ForegroundColor Green
+  Write-Host "   DNS: Brave + Windows → https://family.dns.mullvad.net/dns-query (194.242.2.6/2a07:e340::6, fallback allowed)" -ForegroundColor Green
   Write-Host "`n   Restart your terminal to see the Windows logo prompt " -ForegroundColor Cyan
   Write-Host "   Secrets: [System.Environment]::SetEnvironmentVariable('GITHUB_PERSONAL_ACCESS_TOKEN','ghp_...','User')" -ForegroundColor DarkGray
+}
+# Final summary with errors
+if ($global:DotfilesProgressErrors -gt 0) {
+  Write-Host "`n   ⚠️  Completed with $($global:DotfilesProgressErrors) warnings — check yellow ! above, rerun with -DryRun to preview" -ForegroundColor Yellow
+} else {
+  Show-CuteProgress -Msg "All done" -Final
 }
 Write-Host ""
 
