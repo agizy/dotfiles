@@ -1,0 +1,20 @@
+﻿[
+    {
+        "name":  "Tampermonkey",
+        "id":  "dhdgffkkebhmkfjojejmpbldmpobfkfo",
+        "store":  "https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo",
+        "version":  "5.5.0"
+    },
+    {
+        "name":  "Malwarebytes Browser Guard",
+        "id":  "ihcjicgdanjaechkgeegckofjjedodee",
+        "store":  "https://chrome.google.com/webstore/detail/malwarebytes-browser-guard/ihcjicgdanjaechkgeegckofjjedodee",
+        "version":  "3.3.4"
+    },
+    {
+        "name":  "SponsorBlock",
+        "id":  "mnjggcdmjocbbbhaepdhchncahnbgone",
+        "store":  "https://chrome.google.com/webstore/detail/sponsorblock-youtube-skip/mnjggcdmjocbbbhaepdhchncahnbgone",
+        "version":  "6.1.6"
+    }
+]

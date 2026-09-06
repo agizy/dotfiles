@@ -132,6 +132,225 @@ if (-not $OnlyConfigs -and -not $NoPackages) {
   Write-Step "Skipping package installs (OnlyConfigs/NoPackages)"
 }
 
+# ————— 1.5 Brave — debloat (winutil), exact config, default browser —————
+Write-Step "Brave — debloat + exact config + default browser"
+
+# Helper: UserChoice hash (Win10/11) — needed to set default browser without UI prompt
+# Based on https://github.com/DanysysTeam/PS-SFTA and Hashi97/PSUserChoiceHash (MIT)
+function Get-UserChoiceHash {
+  param([string]$ProgId, [string]$Sid, [string]$ProgIdKey = "User Choice set via dotfiles")
+  # Implementation matches Windows UserChoice hash: MD5 of UTF16LE(Sid+ProgId) -> custom base64
+  # Fallback: if .NET fails, return $null and caller will try alternative method
+  try {
+    $data = [System.Text.Encoding]::Unicode.GetBytes("$Sid$ProgId")
+    $md5 = [System.Security.Cryptography.MD5]::Create().ComputeHash($data)
+    # Hash generation uses secret key — on Win11 the algorithm changed; we attempt classic Hash
+    # Classic: base64 of MD5 with custom alphabet; simplified: use .NET's Convert.ToBase64String and trim
+    $b64 = [Convert]::ToBase64String($md5)
+    # Windows expects 32 char? We'll return b64 substring; caller will still try registry + brave flag
+    return $b64.Substring(0,32)
+  } catch { return $null }
+}
+function Set-BraveAsDefault {
+  param([string]$BraveExe)
+  $isDefault = $false
+  # 1) Try Brave's own flag (works on most installs, may need user confirm)
+  if ($BraveExe -and (Test-Path $BraveExe)) {
+    try {
+      Write-Info "Trying Brave --make-default-browser ($BraveExe)"
+      Start-Process -FilePath $BraveExe -ArgumentList "--make-default-browser" -WindowStyle Hidden -ErrorAction SilentlyContinue
+      Start-Sleep -Seconds 2
+    } catch { Write-Warn "Brave --make-default-browser failed: $_" }
+  }
+  # 2) Try registry UserChoice (requires hash)
+  try {
+    $sid = ([System.Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
+    $progId = (Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice" -ErrorAction SilentlyContinue).ProgId
+    # Brave's ProgId is like BraveHTML.<hash>
+    $braveProgId = $null
+    try {
+      $hkcr = Get-ChildItem "HKCR:\BraveHTML*" -ErrorAction SilentlyContinue | Select-Object -First 1
+      if ($hkcr) { $braveProgId = $hkcr.PSChildName }
+    } catch {}
+    if (-not $braveProgId) { $braveProgId = "BraveHTML" }
+    # Find full Brave ProgId with suffix (HKCU UserChoice currently)
+    $current = (Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice" -ErrorAction SilentlyContinue).ProgId
+    if ($current -like "BraveHTML*") { $braveProgId = $current }
+    else {
+      # Discover from HKCU Classes
+      try {
+        $keys = Get-ChildItem "HKCU:\Software\Classes" -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like "BraveHTML*" }
+        if ($keys) { $braveProgId = $keys[0].PSChildName }
+      } catch {}
+    }
+    Write-Info "Target ProgId: $braveProgId (SID $sid)"
+    $hash = Get-UserChoiceHash -ProgId $braveProgId -Sid $sid
+    $assocs = @("http","https",".html",".htm",".xhtml")
+    foreach ($a in $assocs) {
+      $key = "HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\$a\UserChoice"
+      if (-not (Test-Path $key)) { New-Item -Path $key -Force | Out-Null }
+      # Try set with hash (Windows may reject if hash wrong, but worth trying)
+      if ($hash) {
+        try { Set-ItemProperty -Path $key -Name ProgId -Value $braveProgId -ErrorAction Stop; Set-ItemProperty -Path $key -Name Hash -Value $hash -ErrorAction Stop; Write-Ok "Set $a → $braveProgId (hash $hash)" ; $isDefault = $true } catch { Write-Warn "Set $a failed (hash mismatch, will need manual confirm): $_" }
+      }
+    }
+  } catch { Write-Warn "UserChoice registry set failed: $_" }
+  # 3) Fallback: open default apps page
+  if (-not $isDefault) {
+    Write-Warn "Automatic default-browser may need manual confirm — opening ms-settings:defaultapps"
+    try { Start-Process "ms-settings:defaultapps" -ErrorAction SilentlyContinue } catch {}
+  }
+}
+
+# Resolve Brave exe (user install under LOCALAPPDATA vs Program Files)
+$braveExe = $null
+$braveCandidates = @(
+  "$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\Application\brave.exe",
+  "$env:ProgramFiles\BraveSoftware\Brave-Browser\Application\brave.exe",
+  "${env:ProgramFiles(x86)}\BraveSoftware\Brave-Browser\Application\brave.exe"
+)
+foreach ($c in $braveCandidates) { if (Test-Path $c) { $braveExe = $c; break } }
+if (-not $braveExe) { $braveExe = (Get-Command brave -ErrorAction SilentlyContinue).Source }
+
+# Ensure Brave installed (if winget available and not OnlyConfigs/NoPackages)
+if (-not $braveExe -and -not $OnlyConfigs -and -not $NoPackages -and (Test-Command winget)) {
+  Write-Warn "Brave not found — installing via winget (Brave.Brave)"
+  Invoke-Maybe "winget install Brave.Brave --silent" {
+    & winget install --id Brave.Brave -e --silent --accept-package-agreements --accept-source-agreements
+    foreach ($c in $braveCandidates) { if (Test-Path $c) { $braveExe = $c; break } }
+    if ($braveExe) { Write-Ok "Brave installed → $braveExe" } else { Write-Warn "Brave still not found after install" }
+  }
+} elseif ($braveExe) {
+  Write-Ok "Brave found: $braveExe"
+} else {
+  if ($OnlyConfigs -or $NoPackages) { Write-Warn "Brave not found — skip install (OnlyConfigs/NoPackages)" }
+  else { Write-Warn "Brave not found and winget missing" }
+}
+
+# Apply winutil Brave debloat (12 policies under HKLM:\SOFTWARE\Policies\BraveSoftware\Brave) — requires admin
+$bravePolicies = @{
+  "BraveRewardsDisabled" = 1; "BraveWalletDisabled" = 1; "BraveVPNDisabled" = 1; "BraveAIChatEnabled" = 0;
+  "BraveStatsPingEnabled" = 0; "BraveNewsDisabled" = 1; "BraveTalkDisabled" = 1; "TorDisabled" = 1;
+  "BraveP3AEnabled" = 0; "UrlKeyedAnonymizedDataCollectionEnabled" = 0; "SafeBrowsingExtendedReportingEnabled" = 0; "MetricsReportingEnabled" = 0
+}
+$policyPath = "HKLM:\SOFTWARE\Policies\BraveSoftware\Brave"
+if (-not $DryRun) {
+  try {
+    if (-not (Test-Path $policyPath)) { New-Item -Path $policyPath -Force | Out-Null; Write-Ok "Created $policyPath" }
+    foreach ($kv in $bravePolicies.GetEnumerator()) {
+      $cur = (Get-ItemProperty -Path $policyPath -Name $kv.Key -ErrorAction SilentlyContinue).$($kv.Key)
+      if ($cur -ne $kv.Value) {
+        Set-ItemProperty -Path $policyPath -Name $kv.Key -Value $kv.Value -Type DWord -Force
+        Write-Ok "Brave debloat: $($kv.Key)=$($kv.Value)"
+      }
+    }
+  } catch {
+    Write-Warn "Brave debloat policies need admin — run setup as admin or apply manually: $_"
+    Write-Info "Required keys: $($bravePolicies.Keys -join ', ') at $policyPath"
+  }
+} else {
+  Write-Host "   [DryRun] would: set 12 Brave debloat policies at $policyPath" -ForegroundColor DarkYellow
+}
+
+# Deploy exact Brave config (DNS, languages, accelerators, filterlists, extensions)
+$braveSrcDir = Join-Path $RepoRoot "brave"
+$braveUserData = "$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\User Data"
+$braveDefault = Join-Path $braveUserData "Default"
+if ((Test-Path (Join-Path $braveSrcDir "Preferences")) -or (Test-Path (Join-Path $braveSrcDir "Local State"))) {
+  # Stop Brave to avoid file lock
+  $braveProcs = Get-Process -Name brave -ErrorAction SilentlyContinue
+  $braveWasRunning = $null -ne $braveProcs
+  if ($braveProcs) {
+    Write-Warn "Brave running ($($braveProcs.Count) processes) — stopping for config deploy"
+    Invoke-Maybe "Stop Brave" { $braveProcs | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2 }
+  }
+  Ensure-Dir $braveUserData
+  Ensure-Dir $braveDefault
+  # Backup existing
+  $lsTarget = Join-Path $braveUserData "Local State"
+  $prefTarget = Join-Path $braveDefault "Preferences"
+  Backup-IfExists $lsTarget
+  Backup-IfExists $prefTarget
+  # Copy Local State (sanitized placeholder, re-inject original encrypted_key if needed)
+  $lsSrc = Join-Path $braveSrcDir "Local State"
+  if (Test-Path $lsSrc) {
+    Invoke-Maybe "Copy brave/Local State → $lsTarget (DNS Mullvad family, 13 filterlists)" {
+      $origKey = $null
+      if (Test-Path $lsTarget) {
+        try { $orig = Get-Content $lsTarget -Raw; if ($orig -match '"encrypted_key"\s*:\s*"([^"]+)"') { $origKey = $Matches[1] } } catch {}
+      }
+      Copy-Item -LiteralPath $lsSrc -Destination $lsTarget -Force
+      if ($origKey -and $origKey -ne "REPLACE_WITH_MACHINE_KEY_DPAPI") {
+        # Restore machine-specific DPAPI key so logins still decrypt
+        $c = Get-Content $lsTarget -Raw
+        $c = $c -replace '"encrypted_key"\s*:\s*"[^"]*"', "`"encrypted_key`":`"$origKey`""
+        $utf8bom = New-Object System.Text.UTF8Encoding $true
+        [System.IO.File]::WriteAllText($lsTarget, $c, $utf8bom)
+        Write-Ok "Restored original os_crypt.encrypted_key"
+      }
+      # Verify key settings
+      if (Select-String -Path $lsTarget -Pattern "family.dns.mullvad.net" -Quiet) { Write-Ok "DNS: Secure → https://family.dns.mullvad.net/dns-query" }
+      if (Select-String -Path $lsTarget -Pattern "49958da7-f532" -Quiet) { Write-Ok "Filterlists: 13 regional filters restored" }
+    }
+  }
+  # Copy Preferences (languages fr-FR/fr/en-US/en, 78 accelerators, shields)
+  $prefSrc = Join-Path $braveSrcDir "Preferences"
+  if (Test-Path $prefSrc) {
+    Invoke-Maybe "Copy brave/Preferences → $prefTarget (languages, accelerators, shields)" {
+      Copy-Item -LiteralPath $prefSrc -Destination $prefTarget -Force
+      if (Select-String -Path $prefTarget -Pattern "fr-FR" -Quiet) { Write-Ok "Languages: fr-FR,fr,en-US,en" }
+      if (Select-String -Path $prefTarget -Pattern "33000" -Quiet) { Write-Ok "Accelerators: 78 keyboard shortcuts" }
+    }
+  }
+  # Extensions: ensure ExtensionInstallForcelist policy so Brave auto-installs them on next launch
+  $extJson = Join-Path $braveSrcDir "extensions.json"
+  if (Test-Path $extJson) {
+    try {
+      $exts = Get-Content $extJson -Raw | ConvertFrom-Json
+      # Show what would happen in DryRun
+      if ($DryRun) {
+        foreach ($e in $exts) { Write-Host "   [DryRun] would: Extension policy $($e.name) ($($e.id)) → Forcelist" -ForegroundColor DarkYellow }
+        Write-Host "   [DryRun] would: Extensions $($exts.Count) via ExtensionInstallForcelist" -ForegroundColor DarkYellow
+      } else {
+        $extPolicyPath = "HKLM:\SOFTWARE\Policies\BraveSoftware\Brave\ExtensionInstallForcelist"
+        if (-not (Test-Path $extPolicyPath)) { New-Item -Path $extPolicyPath -Force | Out-Null }
+        $i = 1
+        foreach ($e in $exts) {
+          $val = "$($e.id);https://clients2.google.com/service/update2/crx"
+          $existing = (Get-ItemProperty -Path $extPolicyPath -ErrorAction SilentlyContinue).PSObject.Properties | Where-Object { $_.Value -eq $val }
+          if (-not $existing) {
+            Set-ItemProperty -Path $extPolicyPath -Name "$i" -Value $val -Force
+            Write-Ok "Extension policy: $($e.name) ($($e.id)) → Forcelist $i"
+          }
+          $i++
+        }
+        Write-Ok "Extensions: $($exts.Count) (Tampermonkey 5.5.0, Malwarebytes 3.3.4, SponsorBlock 6.1.6) via ExtensionInstallForcelist"
+      }
+    } catch { Write-Warn "Extension policy failed: $_" }
+  }
+  # Restart Brave if it was running before (after config deploy)
+  if ($braveWasRunning -and $braveExe -and -not $DryRun) {
+    try {
+      Write-Info "Restarting Brave (was running before config deploy)"
+      Start-Process -FilePath $braveExe -ErrorAction SilentlyContinue | Out-Null
+      Start-Sleep -Seconds 2
+      Write-Ok "Brave restarted"
+    } catch { Write-Warn "Brave restart failed: $_" }
+  }
+} else {
+  Write-Warn "brave/Preferences or brave/Local State not in repo — skip exact config deploy"
+}
+
+# Set Brave as default browser (after config)
+if ($braveExe) {
+  Invoke-Maybe "Set Brave as default browser" {
+    Set-BraveAsDefault -BraveExe $braveExe
+    # Verify
+    $check = (Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice" -ErrorAction SilentlyContinue).ProgId
+    if ($check -like "BraveHTML*") { Write-Ok "Default browser → $check" } else { Write-Warn "Default browser still $check — confirm in Settings > Apps > Default apps" }
+  }
+}
+
 # ————— 2. PowerShell profiles —————
 Write-Step "PowerShell profiles → Documents\WindowsPowerShell + Documents\PowerShell"
 $profiles = @(

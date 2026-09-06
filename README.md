@@ -26,7 +26,10 @@ powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.c
 
 | Area | Action | Source in repo |
 |---|---|---|
-| **Winget** | `winget import -i winget/packages.json` — 44 version-pinned packages (Git, Brave, Zen, Node 24, Deno, Fastfetch 2.68.1, zoxide 0.10.0, Syncthing 2.1.3, VLC/MPV yt-dlp FFmpeg, JetBrainsMono Nerd Font, etc.) | `winget/packages.json` |
+| **Winget** | `winget import -i winget/packages.json` — 42 version-pinned packages (Git, Brave 152.1.94.121, Zen, Node 24, Deno, Fastfetch 2.68.1, zoxide 0.10.0, Syncthing 2.1.3, VLC/MPV yt-dlp FFmpeg, JetBrainsMono Nerd Font, etc.) | `winget/packages.json` |
+| **Brave debloat** | winutil copy — 12 policies `HKLM:\SOFTWARE\Policies\BraveSoftware\Brave` (Rewards/Wallet/VPN/AI/News/Talk/Tor/P3A disabled, Stats ping off) — applied automatically after Brave install | `setup.ps1` + `brave/README.md` |
+| **Brave exact config** | DNS `secure` → `https://family.dns.mullvad.net/dns-query`, 13 filterlists, languages `fr-FR,fr,en-US,en`, 78 accelerators, shields — `Local State` + `Preferences` + `ExtensionInstallForcelist` | `brave/Local State`, `brave/Preferences`, `brave/extensions.json` |
+| **Brave default** | Sets `BraveHTML` for `http/https/.html/.htm/.xhtml` via `brave.exe --make-default-browser` + UserChoice hash, fallback `ms-settings:defaultapps` | `setup.ps1:Set-BraveAsDefault` |
 | **Chocolatey** | `choco install` from `choco/packages.config` — fzf, ripgrep, opencode, unzip | `choco/packages.config` |
 | **PowerShell** | Deploys profile to **both** `Documents\WindowsPowerShell` (5.1) and `Documents\PowerShell` (7+) | `powershell/` |
 | **PS modules** | `PSReadLine`, `PSFzf` | `setup.ps1` |
@@ -44,7 +47,7 @@ powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.c
 dotfiles/
 ├─ setup.ps1                 # ← consolidated installer (idempotent, supports -DryRun)
 ├─ bootstrap.ps1             # ← irm one-liner entry point
-├─ winget/packages.json      # winget export --include-versions
+├─ winget/packages.json      # winget export --include-versions (42 pkgs, Teams/Outlook removed)
 ├─ choco/packages.config     # choco list snapshot
 ├─ powershell/
 │  ├─ Microsoft.PowerShell_profile.ps1        # Windows PowerShell 5.1 (gh0stzk, Windows logo)
@@ -54,6 +57,11 @@ dotfiles/
 │  ├─ config-no-nerd.jsonc
 │  └─ gh0stzk-logo.txt
 ├─ terminal/settings.json    # Windows Terminal, One Half Dark + JetBrainsMono NF
+├─ brave/
+│  ├─ Local State            # dns_over_https Mullvad family, 13 filterlists (sanitized encrypted_key)
+│  ├─ Preferences            # languages fr-FR, 78 accelerators, shields
+│  ├─ extensions.json        # Tampermonkey 5.5.0, Malwarebytes 3.3.4, SponsorBlock 6.1.6
+│  └─ README.md              # debloat + default browser docs
 ├─ raycast/
 │  ├─ extensions.json        # 7 installed Store extensions
 │  └─ extensions.txt
@@ -107,7 +115,8 @@ Set once on a new machine:
 * **Terminal:** Windows Terminal 1.24.11911.0
 * **Shell:** Windows PowerShell 5.1.26100.8875 (+ PowerShell profile also covers pwsh 7)
 * **Prompt:** gh0stzk-inspired, ` $USER  $DIR  branch >>` — Windows logo `0xf17a`, PSReadLine, zoxide (`z`, `zi`), aliases `bat→cat`, `eza→ls/ll`, `rg→grep`, `fd→find`
-* **Packages:** 44 winget + 7 choco (see `winget/packages.json`, `choco/packages.config`)
+* **Packages:** 42 winget (+ Brave 152.1.94.121 with debloat) + 7 choco (see `winget/packages.json`, `choco/packages.config`)
+* **Brave:** debloated via winutil 12 policies, DNS Secure Mullvad Family `https://family.dns.mullvad.net/dns-query`, 13 filterlists, languages `fr-FR,fr,en-US,en`, 78 accelerators, 3 extensions (Tampermonkey, Malwarebytes, SponsorBlock), default browser `BraveHTML`
 
 ---
 
@@ -120,6 +129,9 @@ choco list --limit-output > choco/packages.config  # or copy back
 Copy-Item $PROFILE powershell/Microsoft.PowerShell_profile.ps1 -Force
 Copy-Item ~\.config\fastfetch\config.jsonc fastfetch/ -Force
 Copy-Item $env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json terminal/ -Force
+Copy-Item "$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\User Data\Local State" brave/ -Force
+Copy-Item "$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\User Data\Default\Preferences" brave/ -Force
+(Get-Content brave/"Local State" -Raw) -replace '"encrypted_key"\s*:\s*"[^"]+"','"encrypted_key":"REPLACE_WITH_MACHINE_KEY_DPAPI"' | Set-Content brave/"Local State" -NoNewline -Encoding UTF8
 git add -A; git commit -m "snapshot $(Get-Date -Format yyyy-MM-dd)"; git push
 ```
 
