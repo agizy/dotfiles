@@ -16,7 +16,7 @@ $extraPaths = @(
 )
 $env:Path = ($extraPaths -join ";") + ";" + $env:Path
 # Translate args for bash
-$argString = $args | ForEach-Object { if ($_ -match '\s') { "'$_'" } else { $_ } } | Join-String -Separator " "
+# args handled via $bashArgs directly
 $aniCli = Join-Path $PSScriptRoot "ani-cli"
 # If run from installed location (~\.local\bin), fallback to repo path
 if (-not (Test-Path $aniCli)) { $aniCli = "$HOME\.local\bin\ani-cli" }
@@ -26,3 +26,4 @@ if (-not (Test-Path $aniCli)) { $aniCli = "C:\Users\Panaino\dotfiles\ani-cli\ani
 $bashArgs = @("-l", $aniCli) + $args
 & $bash @bashArgs
 exit $LASTEXITCODE
+
