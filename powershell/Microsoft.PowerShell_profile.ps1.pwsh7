@@ -1,0 +1,16 @@
+﻿$env:Path += ";$env:LOCALAPPDATA\Microsoft\WinGet\Links"
+# gh0stzk fastfetch autostart — Sisyphus
+$ff = "$env:LOCALAPPDATA\Microsoft\WinGet\Links\fastfetch.exe"
+if (Test-Path $ff) {
+  # Avoid running inside VS Code tasks or non-interactive
+  $isInteractive = [Environment]::UserInteractive -and $Host.Name -eq "ConsoleHost"
+  if ($isInteractive) { & $ff }
+}
+
+# --- zoxide — smarter cd (gh0stzk style) ---
+# https://github.com/ajeetdsouza/zoxide
+# Usage: `z <fuzzy>` to jump, `zi` for interactive, `z -` previous
+Invoke-Expression (& { (zoxide init powershell | Out-String) })
+Set-Alias -Name cdz -Value __zoxide_z -ErrorAction SilentlyContinue
+
+

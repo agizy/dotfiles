@@ -1,0 +1,26 @@
+﻿{
+  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/master/doc/json_schema.json",
+  "logo": {
+    "type": "file-raw",
+    "source": "C:/Users/Panaino/.config/fastfetch/gh0stzk-logo.txt",
+    "padding": { "top": 1, "left": 2, "right": 3 }
+  },
+  "display": { "separator": "  ─  ", "color": { "keys": "cyan", "title": "blue" }, "brightColor": false },
+  "modules": [
+    "break","title","separator",
+    { "type": "os", "key": "  OS", "format": "{name} {version}" },
+    { "type": "host", "key": "  HOST" },
+    { "type": "kernel", "key": "  KERN" },
+    { "type": "packages", "key": "  PKGS" },
+    { "type": "shell", "key": "  SH" },
+    { "type": "terminal", "key": "  TERM" },
+    { "type": "de", "key": "  DE" },
+    { "type": "wm", "key": "  WM" },
+    { "type": "memory", "key": "  RAM", "format": "{used} / {total} ({percentage})" },
+    { "type": "disk", "key": "  DISK", "format": "{size-used} / {size-total} ({size-percentage})" },
+    { "type": "uptime", "key": "  UP" },
+    { "type": "cpu", "key": "  CPU", "format": "{name}" },
+    { "type": "gpu", "key": "  GPU", "format": "{name}" },
+    "break","colors"
+  ]
+}

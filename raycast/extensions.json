@@ -1,0 +1,58 @@
+﻿[
+    {
+        "id":  "0e43920f-bbf6-4582-bc3f-5f63092c915f",
+        "name":  "translate",
+        "title":  "Google Translate",
+        "version":  null,
+        "author":  "gebeto",
+        "description":  "Simple translation using Google Translate"
+    },
+    {
+        "id":  "30370bf8-bb2c-41ad-844b-ff661ae4337a",
+        "name":  "video-downloader",
+        "title":  "Video Downloader",
+        "version":  null,
+        "author":  "vimtor",
+        "description":  "Download videos from YouTube, ð•, Twitch, Instagram, Bilibili and more"
+    },
+    {
+        "id":  "320f40ef-a633-415a-ab0e-1e99515478f7",
+        "name":  "spotify-player",
+        "title":  "Spotify Player",
+        "version":  null,
+        "author":  "mattisssa",
+        "description":  "Spotify\u0027s most common features, now at your fingertips. Search for music and podcasts, browse your library, and control the playback. Glance at what\u0027s currently playing directly from the menu bar."
+    },
+    {
+        "id":  "626ef38e-1e63-4bcf-9b23-7e7802665073",
+        "name":  "fmhy-search",
+        "title":  "FMHY Search",
+        "version":  null,
+        "author":  "akshit_mehta",
+        "description":  "Search the FreeMediaHeckYeah database of free resources"
+    },
+    {
+        "id":  "82c92be8-822f-4923-a5bc-573830b674fb",
+        "name":  "coffee",
+        "title":  "Coffee",
+        "version":  null,
+        "author":  "mooxl",
+        "description":  "Prevent the sleep function on your computer"
+    },
+    {
+        "id":  "b3f8cbba-a0f8-4f17-a711-0194a6f2ff4d",
+        "name":  "youtube",
+        "title":  "YouTube",
+        "version":  null,
+        "author":  "tonka3000",
+        "description":  "Search Videos, Channels, and more"
+    },
+    {
+        "id":  "db530047-6a7d-46d3-bb7d-5d7ba9006b4d",
+        "name":  "speedtest",
+        "title":  "Speedtest",
+        "version":  null,
+        "author":  "tonka3000",
+        "description":  "Test the performance and quality of your internet connection via speedtest.net"
+    }
+]

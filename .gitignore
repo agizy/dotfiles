@@ -1,0 +1,26 @@
+# OS
+Thumbs.db
+Desktop.ini
+*.lnk
+
+# Secrets — never commit real tokens
+.env
+*.pem
+*.key
+
+# Syncthing live state (don't commit device keys)
+Syncthing/key.pem
+Syncthing/cert.pem
+Syncthing/https-*.pem
+
+# Cache / compiled raycast (re-installed from Store)
+raycast/node-compile-cache/
+raycast/extensions/*/dist/
+raycast/extensions/**/node_modules/
+
+# Backups
+*.bak.*
+*.bak
+
+# Logs
+*.log

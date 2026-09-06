@@ -1,0 +1,7 @@
+﻿- Google Translate (translate) [id: 0e43920f-bbf6-4582-bc3f-5f63092c915f]
+- Video Downloader (video-downloader) [id: 30370bf8-bb2c-41ad-844b-ff661ae4337a]
+- Spotify Player (spotify-player) [id: 320f40ef-a633-415a-ab0e-1e99515478f7]
+- FMHY Search (fmhy-search) [id: 626ef38e-1e63-4bcf-9b23-7e7802665073]
+- Coffee (coffee) [id: 82c92be8-822f-4923-a5bc-573830b674fb]
+- YouTube (youtube) [id: b3f8cbba-a0f8-4f17-a711-0194a6f2ff4d]
+- Speedtest (speedtest) [id: db530047-6a7d-46d3-bb7d-5d7ba9006b4d]
