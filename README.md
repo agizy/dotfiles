@@ -39,6 +39,9 @@ powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.c
 | **Syncthing** | `winget install Syncthing.Syncthing`, `syncthing generate`, scheduled task `Syncthing` at logon + `Startup\Syncthing.lnk`, firewall rule | `syncthing/` |
 | **Wallpaper** | `Seongjin Park.jpg` `5281757` bytes `Fill` via `SystemParametersInfo` → `~/Pictures/Seongjin Park.jpg` (from `Pictures/Seongjin Park.jpg`, Asus OLED Shifter source) | `wallpaper/wallpaper.jpg` |
 | **Default Apps** | `Dism /Online /Import-DefaultAppAssociations` + per-user `UserChoice` — Brave `http/https/.html/.htm/.xhtml/.pdf`, ImageGlass `jpg/svg`, Photos `png/bmp/gif`, Media `mp4/mkv/mp3`, Notepad `txt` | `defaultapps/AppAssoc.xml` |
+| **Organization** | `O&OShutUp10++` recommended `2026-09-06T03:00:11Z` **except clipboard** — `OOSU10.cfg` 45077 bytes `~150` settings `true` (`A001-003`, `C008-015`, `E001-256` etc.) → `OOSU10.exe /quiet` (79 MB) | `ooshutup/OOSU10.cfg` |
+| **ani-cli** | `pystardust/ani-cli 5.0.4` `27689` bytes `#!/bin/sh` + `mpv v0.41.0` `fzf 0.74.3` `yt-dlp 2026.07.04` `ffmpeg 9.0.1` `aria2 1.37.0` + `Git Bash` — `~\.local\bin\ani-cli` | `ani-cli/ani-cli` + `.ps1/.cmd` |
+| **Progress** | Cute adaptive `♡  60% [████░░] 6/17` — `Get-TerminalWidth` each step, `█/░` (♥ at 100%), `✗` on error, `✨` elapsed, `chcp 65001` UTF8 | `setup.ps1:Show-CuteProgress` |
 | **Font & polish** | JetBrainsMono Nerd Font 3.3.0, Windows logo prompt (`0xf17a` , not Apple ) | profile |
 
 ---
@@ -68,6 +71,14 @@ dotfiles/
 │  └─ wallpaper.jpg          # Seongjin Park 5281757 bytes Fill (exact)
 ├─ defaultapps/
 │  └─ AppAssoc.xml           # Dism export 12944 bytes (Brave, ImageGlass, Photos, Media, Notepad)
+├─ ooshutup/
+│  ├─ OOSU10.cfg             # recommended - clipboard 45077 bytes 2026-09-06T03:00:11Z
+│  └─ README.md              # O&O docs
+├─ ani-cli/
+│  ├─ ani-cli                # pystardust 5.0.4 27689 bytes sh
+│  ├─ ani-cli.ps1            # PowerShell wrapper (Git Bash -l)
+│  ├─ ani-cli.cmd            # CMD wrapper
+│  └─ README.md
 ├─ raycast/
 │  ├─ extensions.json        # 7 installed Store extensions
 │  └─ extensions.txt
@@ -125,6 +136,9 @@ Set once on a new machine:
 * **Brave:** debloated via winutil 12 policies, DNS Secure Mullvad Family `https://family.dns.mullvad.net/dns-query`, 13 filterlists, languages `fr-FR,fr,en-US,en`, 78 accelerators, 3 extensions (Tampermonkey, Malwarebytes, SponsorBlock), default browser `BraveHTML`
 * **Wallpaper:** `Seongjin Park.jpg` `5281757` bytes `SHA256 07386AE035C39A786EDBBF30FD2C775B956FFDB25B8B18BBE961C2480619480F` — `Fill` — Asus OLED Shifter source `C:\Users\Panaino\Pictures\Seongjin Park.jpg`
 * **Default Apps:** `Brave` → `http/https/.html/.htm/.xhtml/.mhtml/.shtml/.pdf`, `ImageGlass` → `.jpg/.svg`, `Photos` → `.png/.bmp/.gif/.jpeg`, `Lecteur multimédia` → `.mp4/.mkv/.mp3/.avi/.mov`, `Bloc-notes` → `.txt/.ini/.log`, `CompressedFolder` → `.zip` (12944 bytes `AppAssoc.xml` via `Dism`)
+* **Organization:** `O&OShutUp10++` `2026-09-06T03:00:11Z` recommended minus clipboard — `OOSU10.cfg` `45077` bytes, `RecentStates` `~150` true (`E001-256`, `P001-194` etc.), `OOSU10.exe` `79 MB` portable via `https://dl5.oo-software.com/files/ooshutup10/OOSU10.exe`
+* **ani-cli:** `5.0.4` `mpv v0.41.0` `fzf 0.74.3` `yt-dlp 2026.07.04` `ffmpeg 9.0.1` `aria2 1.37.0` `Git Bash` — `~\.local\bin\ani-cli` + `~\bin\mpv.exe` shim
+* **Progress:** `♡  60% [████░░] 6/17` cute adaptive — `Get-TerminalWidth` each `Step-Progress`, `█` filled `░` empty `♥` at 100% `✗` red on error `✨` elapsed, `UTF8` `chcp 65001`, not verbose but shows `✓/!` per step
 
 ---
 

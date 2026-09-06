@@ -53,6 +53,78 @@ function Ensure-Dir($Path) {
 }
 function Test-Command($Name) { $null -ne (Get-Command $Name -ErrorAction SilentlyContinue) }
 
+# ————— cute adaptive progress bar —————
+$global:DotfilesProgressTotal = 17
+$global:DotfilesProgressCurrent = 0
+$global:DotfilesProgressErrors = 0
+$global:DotfilesProgressStart = Get-Date
+
+function Get-TerminalWidth {
+  try {
+    $w = $Host.UI.RawUI.WindowSize.Width
+    if ($w -gt 0) { return $w }
+  } catch {}
+  try { return [Console]::WindowWidth } catch {}
+  return 80
+}
+function Show-CuteProgress {
+  param([string]$Msg, [switch]$IsError, [switch]$Final)
+  $total = $global:DotfilesProgressTotal
+  $cur = $global:DotfilesProgressCurrent
+  if ($Final) { $cur = $total }
+  $width = Get-TerminalWidth
+  # reserve ~28 chars for " ♡ 100% [bar] 15/15 " + msg, adapt bar width
+  $msgLen = $Msg.Length
+  $barMax = 30
+  $barMin = 10
+  $reserved = 20 + $msgLen + 12  # icon + pct + brackets + counts
+  $barWidth = $width - $reserved
+  if ($barWidth -gt $barMax) { $barWidth = $barMax }
+  if ($barWidth -lt $barMin) { $barWidth = $barMin }
+  $pct = if ($total -eq 0) { 0 } else { [math]::Round($cur / $total * 100) }
+  $filled = [math]::Round($cur / $total * $barWidth)
+  if ($filled -gt $barWidth) { $filled = $barWidth }
+  $empty = $barWidth - $filled
+  # cute blocks: filled ♥/█, empty ♡/░
+  $filledChar = "█"
+  $emptyChar = "░"
+  if ($pct -eq 100 -and -not $IsError) { $filledChar = "♥" }
+  $bar = ($filledChar * $filled) + ($emptyChar * $empty)
+  $icon = if ($IsError) { "✗" } elseif ($Final -or $pct -eq 100) { "♥" } else { "♡" }
+  $color = if ($IsError) { "Red" } elseif ($Final -or $pct -eq 100) { "Green" } else { "Cyan" }
+  $elapsed = [math]::Round(((Get-Date) - $global:DotfilesProgressStart).TotalSeconds,1)
+  $line = " $icon $($pct.ToString().PadLeft(3))% [$bar] $cur/$total  $Msg"
+  # cute elapsed on final
+  if ($Final) { $line += "  ${elapsed}s" }
+  # truncate if too long for terminal
+  if ($line.Length -gt $width) { $line = $line.Substring(0, $width - 1) }
+  Write-Host $line -ForegroundColor $color
+}
+function Step-Progress {
+  param([string]$Msg)
+  $global:DotfilesProgressCurrent++
+  if ($global:DotfilesProgressCurrent -gt $global:DotfilesProgressTotal) { $global:DotfilesProgressTotal = $global:DotfilesProgressCurrent }
+  Show-CuteProgress -Msg $Msg
+}
+function Fail-Progress {
+  param([string]$Msg)
+  $global:DotfilesProgressErrors++
+  Show-CuteProgress -Msg "$Msg ✗" -IsError
+}
+
+# Patch Write-Step/Warn/Ok to integrate progress
+$origWriteStep = Get-Command Write-Step -ErrorAction SilentlyContinue
+function Write-Step($msg) {
+  Step-Progress -Msg $msg
+  Write-Host "  → $msg" -ForegroundColor Cyan
+}
+function Write-Info($msg) { Write-Host "   $msg" -ForegroundColor DarkGray }
+function Write-Ok($msg)   { Write-Host "   ✓ $msg" -ForegroundColor Green }
+function Write-Warn($msg) {
+  Write-Host "   ! $msg" -ForegroundColor Yellow
+  # also count as soft error for progress but don't fail bar
+}
+
 # Resolve repo root (where this script lives)
 $RepoRoot = $PSScriptRoot
 if (-not $RepoRoot) { $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path }
@@ -666,7 +738,95 @@ if (Test-Path $appAssocSrc) {
   Write-Warn "defaultapps/AppAssoc.xml not in repo — skip"
 }
 
-# ————— 9. Fonts & extras —————
+# ————— 9. Organization — O&OShutUp10++ (recommended - clipboard) —————
+Write-Step "Organization — O&O ShutUp10++"
+$ooCfgSrc = Join-Path $RepoRoot "ooshutup\OOSU10.cfg"
+$ooExeUrl = "https://dl5.oo-software.com/files/ooshutup10/OOSU10.exe"
+$ooExeTmp = Join-Path $env:TEMP "OOSU10.exe"
+if (Test-Path $ooCfgSrc) {
+  # Download OOSU10.exe if missing
+  if (-not (Test-Path $ooExeTmp)) {
+    Invoke-Maybe "Download O&O ShutUp10++ (79 MB) → $ooExeTmp" {
+      try {
+        Invoke-WebRequest -Uri $ooExeUrl -OutFile $ooExeTmp -UseBasicParsing -TimeoutSec 60
+        Write-Ok "Downloaded OOSU10.exe $((Get-Item $ooExeTmp).Length) bytes"
+      } catch { Write-Warn "Download OOSU10.exe failed: $_ — download manually from https://www.oo-software.com/en/shutup10" }
+    }
+  } else { Write-Ok "OOSU10.exe already at $ooExeTmp" }
+  # Apply config (requires admin)
+  $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+  if (-not $isAdmin) { Write-Warn "O&O ShutUp needs admin — run setup as admin to apply organization settings" }
+  Invoke-Maybe "Apply O&O ShutUp10++ recommended (except clipboard) via OOSU10.cfg /quiet" {
+    try {
+      if (-not (Test-Path $ooExeTmp)) { throw "OOSU10.exe not found at $ooExeTmp" }
+      $cfgTmp = Join-Path $env:TEMP "OOSU10.cfg"
+      Copy-Item -LiteralPath $ooCfgSrc -Destination $cfgTmp -Force
+      # OOSU10 CLI: OOSU10.exe <cfg> /quiet  (also supports /apply)
+      $proc = Start-Process -FilePath $ooExeTmp -ArgumentList "`"$cfgTmp`" /quiet" -Wait -PassThru -WindowStyle Hidden -ErrorAction Stop
+      if ($proc.ExitCode -eq 0) { Write-Ok "O&O ShutUp10++ applied (recommended - clipboard) — restart recommended" }
+      else { Write-Warn "OOSU10.exe exit $($proc.ExitCode) — check GUI: $ooExeTmp" }
+    } catch { Write-Warn "O&O apply failed: $_" }
+  }
+  Write-Info "Config: ooshutup/OOSU10.cfg 45077 bytes, RecentStates 2026-09-06T03:00:11Z, ~150 settings true"
+} else {
+  Write-Warn "ooshutup/OOSU10.cfg not in repo — skip organization settings"
+}
+
+# ————— 10. ani-cli — anime via mpv —————
+Write-Step "ani-cli — pystardust/ani-cli 5.0.4"
+$aniSrcDir = Join-Path $RepoRoot "ani-cli"
+$aniSrc = Join-Path $aniSrcDir "ani-cli"
+$localBin = "$HOME\.local\bin"
+$binDir = "$HOME\bin"
+Ensure-Dir $localBin
+Ensure-Dir $binDir
+# Ensure aria2 for downloads
+if (-not (Test-Command aria2c)) {
+  if (-not $OnlyConfigs -and -not $NoPackages -and (Test-Command winget)) {
+    Invoke-Maybe "winget install aria2.aria2 --silent (ani-cli download)" {
+      & winget install --id aria2.aria2 -e --silent --accept-package-agreements --accept-source-agreements
+      if (Test-Command aria2c) { Write-Ok "aria2c installed" }
+    }
+  } else { Write-Warn "aria2c not found — ani-cli downloads will use curl fallback" }
+} else { Write-Ok "aria2c present" }
+# Ensure mpv shim for Git Bash (expects mpv in PATH)
+$mpvSrc = "C:\Program Files\MPV Player\mpv.exe"
+$mpvDstLocal = Join-Path $localBin "mpv.exe"
+$mpvDstBin = Join-Path $binDir "mpv.exe"
+if ((Test-Path $mpvSrc) -and -not (Test-Path $mpvDstLocal)) {
+  Invoke-Maybe "Copy mpv.exe shim → $mpvDstLocal for Git Bash" {
+    Copy-Item -LiteralPath $mpvSrc -Destination $mpvDstLocal -Force
+    Write-Ok "mpv shim → $mpvDstLocal"
+  }
+}
+if ((Test-Path $mpvSrc) -and -not (Test-Path $mpvDstBin)) {
+  Invoke-Maybe "Copy mpv.exe → $binDir for bash PATH" {
+    Copy-Item -LiteralPath $mpvSrc -Destination $mpvDstBin -Force
+    Write-Ok "mpv → $mpvDstBin"
+  }
+}
+if (Test-Path $aniSrc) {
+  Invoke-Maybe "Copy ani-cli → $localBin\ani-cli (plus .ps1/.cmd wrappers)" {
+    Copy-Item -LiteralPath $aniSrc -Destination (Join-Path $localBin "ani-cli") -Force
+    Copy-Item -LiteralPath (Join-Path $aniSrcDir "ani-cli.ps1") -Destination (Join-Path $localBin "ani-cli.ps1") -Force -ErrorAction SilentlyContinue
+    Copy-Item -LiteralPath (Join-Path $aniSrcDir "ani-cli.cmd") -Destination (Join-Path $localBin "ani-cli.cmd") -Force -ErrorAction SilentlyContinue
+    # chmod +x via bash
+    try { & "C:\Program Files\Git\usr\bin\bash.exe" -l -c "chmod +x ~/.local/bin/ani-cli" 2>$null } catch {}
+    Write-Ok "ani-cli 5.0.4 → $localBin\ani-cli (run: ani-cli --help or bash -l ani-cli)"
+  }
+  # Verify
+  if (-not $DryRun) {
+    try {
+      $out = & "C:\Program Files\Git\usr\bin\bash.exe" -l -c "bash ~/.local/bin/ani-cli --help 2>&1 | head -n 3" 2>&1 | Out-String
+      if ($out -match "ani-cli") { Write-Ok "ani-cli verified: $($out.Split("`n")[0].Trim())" } else { Write-Warn "ani-cli help check failed" }
+    } catch { Write-Warn "ani-cli verify failed: $_" }
+  }
+} else {
+  Write-Warn "ani-cli/ani-cli not in repo — skip"
+}
+Write-Info "Deps: mpv v0.41.0, fzf 0.74.3, yt-dlp 2026.07.04, ffmpeg 9.0.1, aria2c 1.37.0, Git Bash"
+
+# ————— 11. Fonts & extras —————
 Write-Step "Polish"
 Write-Info "JetBrainsMono Nerd Font 3.3.0 should be installed via winget; set as Windows Terminal font (see terminal/settings.json)."
 Write-Info "zoxide is initialized in profile via: Invoke-Expression (& { (zoxide init powershell | Out-String) }) — run 'z <fuzzy>' after restart."

@@ -1,0 +1,7 @@
+# Keep shell scripts LF on Windows
+ani-cli/ani-cli text eol=lf
+*.sh text eol=lf
+*.ps1 text eol=crlf
+wallpaper/* binary
+defaultapps/* text
+ooshutup/* text
