@@ -1,4 +1,5 @@
-﻿$env:Path += ";$env:LOCALAPPDATA\Microsoft\WinGet\Links"
+﻿# encoding: utf8-bom
+$env:Path += ";$env:LOCALAPPDATA\Microsoft\WinGet\Links"
 # gh0stzk fastfetch autostart — Sisyphus
 $ff = "$env:LOCALAPPDATA\Microsoft\WinGet\Links\fastfetch.exe"
 if (Test-Path $ff) {

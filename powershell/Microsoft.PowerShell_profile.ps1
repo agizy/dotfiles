@@ -1,4 +1,5 @@
-﻿# Proposed PowerShell profile - translated from C:\Users\Panaino\Downloads\.zshrc
+﻿# encoding: utf8-bom
+# Proposed PowerShell profile - translated from C:\Users\Panaino\Downloads\.zshrc
 # Backup original: Copy-Item $PROFILE "$PROFILE.bak.$(Get-Date -Format yyyyMMdd_HHmmss)"
 # Apply: Copy-Item "C:\Users\Panaino\AppData\Local\Temp\opencode\proposed_profile.ps1" $PROFILE -Force
 
