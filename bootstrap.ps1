@@ -1,4 +1,4 @@
-# bootstrap.ps1 — one-liner entry point for a fresh machine without git cloned
+﻿# bootstrap.ps1 — one-liner entry point for a fresh machine without git cloned
 # Usage: powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/agizy/dotfiles/main/bootstrap.ps1 | iex"
 # Clones (or updates) the repo to $HOME\dotfiles then invokes setup.ps1
 $ErrorActionPreference = "Stop"

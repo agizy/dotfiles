@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Consolidated installer for agizy/dotfiles — reproduces the exact Vivobook setup on a fresh Windows.
   Idempotent. Backs up existing configs to *.bak.<timestamp>.
