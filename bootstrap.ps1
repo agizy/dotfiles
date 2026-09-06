@@ -8,7 +8,7 @@ $ErrorActionPreference = "Stop"
 $repoUrl = "https://github.com/agizy/dotfiles.git"
 $dest = Join-Path $HOME "dotfiles"
 # Pinned commit for supply-chain verification — update on release (git rev-parse HEAD)
-$PinnedCommit = "1c8c8cd" # 2026-09-06 ani-cli wrapper fix — update after each release
+$PinnedCommit = "114cdc37039181ec7de9292bc2325307a3c82c95" # 2026-09-06 ani-cli wrapper fix — update after each release
 $ExpectedSetupHash = "252D1A21B1DC03C9F24F8038987659468D8810074454697F6B8D861C5A048CD1" # placeholder, updated by setup on clone
 
 Write-Host ">> dotfiles bootstrap — agizy/dotfiles" -ForegroundColor Cyan
@@ -50,4 +50,5 @@ if ($PinnedCommit -and $ExpectedSetupHash -and $ExpectedSetupHash -ne "E3B0C4429
 
 Write-Host ">> invoking setup.ps1 ..." -ForegroundColor Cyan
 & $setup @args
+
 
