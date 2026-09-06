@@ -37,6 +37,8 @@ powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.c
 | **Windows Terminal** | `settings.json` → `%LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal…\LocalState` (backs up original) | `terminal/settings.json` |
 | **Raycast** | Detects `Raycast 2.2.0 (MSIX)`, lists 7 Store extensions to re-install (Spotify, Translate, Coffee, YouTube, etc.) | `raycast/extensions.json` |
 | **Syncthing** | `winget install Syncthing.Syncthing`, `syncthing generate`, scheduled task `Syncthing` at logon + `Startup\Syncthing.lnk`, firewall rule | `syncthing/` |
+| **Wallpaper** | `Seongjin Park.jpg` `5281757` bytes `Fill` via `SystemParametersInfo` → `~/Pictures/Seongjin Park.jpg` (from `Pictures/Seongjin Park.jpg`, Asus OLED Shifter source) | `wallpaper/wallpaper.jpg` |
+| **Default Apps** | `Dism /Online /Import-DefaultAppAssociations` + per-user `UserChoice` — Brave `http/https/.html/.htm/.xhtml/.pdf`, ImageGlass `jpg/svg`, Photos `png/bmp/gif`, Media `mp4/mkv/mp3`, Notepad `txt` | `defaultapps/AppAssoc.xml` |
 | **Font & polish** | JetBrainsMono Nerd Font 3.3.0, Windows logo prompt (`0xf17a` , not Apple ) | profile |
 
 ---
@@ -62,6 +64,10 @@ dotfiles/
 │  ├─ Preferences            # languages fr-FR, 78 accelerators, shields
 │  ├─ extensions.json        # Tampermonkey 5.5.0, Malwarebytes 3.3.4, SponsorBlock 6.1.6
 │  └─ README.md              # debloat + default browser docs
+├─ wallpaper/
+│  └─ wallpaper.jpg          # Seongjin Park 5281757 bytes Fill (exact)
+├─ defaultapps/
+│  └─ AppAssoc.xml           # Dism export 12944 bytes (Brave, ImageGlass, Photos, Media, Notepad)
 ├─ raycast/
 │  ├─ extensions.json        # 7 installed Store extensions
 │  └─ extensions.txt
@@ -117,6 +123,8 @@ Set once on a new machine:
 * **Prompt:** gh0stzk-inspired, ` $USER  $DIR  branch >>` — Windows logo `0xf17a`, PSReadLine, zoxide (`z`, `zi`), aliases `bat→cat`, `eza→ls/ll`, `rg→grep`, `fd→find`
 * **Packages:** 42 winget (+ Brave 152.1.94.121 with debloat) + 7 choco (see `winget/packages.json`, `choco/packages.config`)
 * **Brave:** debloated via winutil 12 policies, DNS Secure Mullvad Family `https://family.dns.mullvad.net/dns-query`, 13 filterlists, languages `fr-FR,fr,en-US,en`, 78 accelerators, 3 extensions (Tampermonkey, Malwarebytes, SponsorBlock), default browser `BraveHTML`
+* **Wallpaper:** `Seongjin Park.jpg` `5281757` bytes `SHA256 07386AE035C39A786EDBBF30FD2C775B956FFDB25B8B18BBE961C2480619480F` — `Fill` — Asus OLED Shifter source `C:\Users\Panaino\Pictures\Seongjin Park.jpg`
+* **Default Apps:** `Brave` → `http/https/.html/.htm/.xhtml/.mhtml/.shtml/.pdf`, `ImageGlass` → `.jpg/.svg`, `Photos` → `.png/.bmp/.gif/.jpeg`, `Lecteur multimédia` → `.mp4/.mkv/.mp3/.avi/.mov`, `Bloc-notes` → `.txt/.ini/.log`, `CompressedFolder` → `.zip` (12944 bytes `AppAssoc.xml` via `Dism`)
 
 ---
 
@@ -132,6 +140,9 @@ Copy-Item $env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\Loc
 Copy-Item "$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\User Data\Local State" brave/ -Force
 Copy-Item "$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\User Data\Default\Preferences" brave/ -Force
 (Get-Content brave/"Local State" -Raw) -replace '"encrypted_key"\s*:\s*"[^"]+"','"encrypted_key":"REPLACE_WITH_MACHINE_KEY_DPAPI"' | Set-Content brave/"Local State" -NoNewline -Encoding UTF8
+Copy-Item "$env:APPDATA\Microsoft\Windows\Themes\TranscodedWallpaper" -Destination wallpaper/wallpaper.jpg -Force # or $HOME\Pictures\Seongjin Park.jpg
+Copy-Item "$env:USERPROFILE\Pictures\Seongjin Park.jpg" wallpaper/wallpaper.jpg -Force
+Dism /Online /Export-DefaultAppAssociations:"$PWD\defaultapps\AppAssoc.xml"
 git add -A; git commit -m "snapshot $(Get-Date -Format yyyy-MM-dd)"; git push
 ```
 

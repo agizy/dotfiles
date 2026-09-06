@@ -550,7 +550,123 @@ if (-not $NoSyncthing) {
   Write-Step "Skipping Syncthing (NoSyncthing)"
 }
 
-# ————— 7. Fonts & extras —————
+# ————— 7. Wallpaper — Seongjin Park —————
+Write-Step "Wallpaper — Seongjin Park (exact)"
+$wallpaperSrc = Join-Path $RepoRoot "wallpaper\wallpaper.jpg"
+$wallpaperDst = "$HOME\Pictures\Seongjin Park.jpg"
+# Also keep a copy at the Transcoded location for reference, but primary is Pictures
+if (Test-Path $wallpaperSrc) {
+  Ensure-Dir (Split-Path $wallpaperDst -Parent)
+  Backup-IfExists $wallpaperDst
+  Invoke-Maybe "Copy wallpaper/wallpaper.jpg → $wallpaperDst (Seongjin Park, 5281757 bytes, SHA256 07386AE...)" {
+    Copy-Item -LiteralPath $wallpaperSrc -Destination $wallpaperDst -Force
+    Write-Ok "Wallpaper copied → $wallpaperDst"
+  }
+  # Apply as desktop wallpaper (needs to handle slideshow vs single)
+  Invoke-Maybe "Set wallpaper via SystemParametersInfo ($wallpaperDst, Fill)" {
+    try {
+      # Set registry for wallpaper style: 10=Fill, 6=Fit, 2=Stretch, 0=Center
+      Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name Wallpaper -Value $wallpaperDst -Force
+      Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name WallpaperStyle -Value "10" -Force
+      Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name TileWallpaper -Value "0" -Force
+      # Also clear slideshow if enabled
+      $wpKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Wallpapers"
+      if (Test-Path $wpKey) {
+        try { Set-ItemProperty -Path $wpKey -Name BackgroundType -Value 0 -Force } catch {}
+      }
+      Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class Wallpaper {
+  [DllImport("user32.dll", CharSet=CharSet.Auto)]
+  public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+}
+"@ -ErrorAction SilentlyContinue
+      $SPI_SETDESKWALLPAPER = 20
+      $SPIF_UPDATEINIFILE = 0x01
+      $SPIF_SENDWININICHANGE = 0x02
+      [Wallpaper]::SystemParametersInfo($SPI_SETDESKWALLPAPER, 0, $wallpaperDst, $SPIF_UPDATEINIFILE -bor $SPIF_SENDWININICHANGE) | Out-Null
+      # Also update Custom.theme so next logon keeps it
+      $themePath = "$env:LOCALAPPDATA\Microsoft\Windows\Themes\Custom.theme"
+      if (Test-Path $themePath) {
+        $c = Get-Content $themePath -Raw
+        $c = $c -replace 'Wallpaper=.*', "Wallpaper=$wallpaperDst"
+        Set-Content -LiteralPath $themePath -Value $c -Encoding Unicode
+      }
+      # Refresh
+      try { RUNDLL32.EXE USER32.DLL,UpdatePerUserSystemParameters 1,1 } catch {}
+      Write-Ok "Wallpaper set → $wallpaperDst (Fill, Seongjin Park)"
+    } catch { Write-Warn "Set wallpaper failed: $_ — set manually via Settings > Personalization > Background" }
+  }
+} else {
+  Write-Warn "wallpaper/wallpaper.jpg not in repo — skip"
+}
+
+# ————— 8. Default Apps — Dism + per-user —————
+Write-Step "Default Apps — import AppAssoc.xml (Brave, ImageGlass, etc.)"
+$appAssocSrc = Join-Path $RepoRoot "defaultapps\AppAssoc.xml"
+if (Test-Path $appAssocSrc) {
+  # 1) Machine-wide via Dism (requires admin) — sets OEM defaults for new users and can set current image
+  if (-not $DryRun) {
+    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    if ($isAdmin) {
+      try {
+        Write-Info "Importing via Dism /Online /Import-DefaultAppAssociations:$appAssocSrc"
+        $dismOut = & Dism /Online /Import-DefaultAppAssociations:"$appAssocSrc" 2>&1 | Out-String
+        Write-Info $dismOut.Trim()
+        if ($LASTEXITCODE -eq 0) { Write-Ok "Dism import done (machine defaults)" } else { Write-Warn "Dism import exit $LASTEXITCODE" }
+      } catch { Write-Warn "Dism import failed: $_" }
+    } else {
+      Write-Warn "Dism import needs admin — skipping machine-wide, will try per-user"
+    }
+  } else {
+    Write-Host "   [DryRun] would: Dism /Online /Import-DefaultAppAssociations:$appAssocSrc (admin)" -ForegroundColor DarkYellow
+  }
+  # 2) Per-user: set key associations via registry (Brave for http/https/html etc. already handled, now generic)
+  # Parse AppAssoc.xml for important ProgIds and apply UserChoice with hash where possible
+  try {
+    [xml]$xml = Get-Content $appAssocSrc -Raw
+    $important = $xml.DefaultAssociations.Association | Where-Object { $_.Identifier -in @(".jpg",".jpeg",".png",".svg",".gif",".bmp",".pdf",".html",".htm",".xhtml","http","https",".mp4",".mp3",".mkv",".txt") }
+    Write-Info "Per-user: $($important.Count) key associations from AppAssoc.xml (ImageGlass, Brave, Photos, Media, Notepad)"
+    foreach ($a in $important) {
+      $id = $a.Identifier
+      $prog = $a.ProgId
+      $app = $a.ApplicationName
+      $key = "HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\$id\UserChoice"
+      # File types use FileExts + UserChoice under HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.ext\UserChoice
+      if ($id.StartsWith(".")) {
+        $key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\$id\UserChoice"
+        # Also try UrlAssociations for consistency
+      }
+      $hash = Get-UserChoiceHash -ProgId $prog -Sid ([System.Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
+      Invoke-Maybe "Default app $id → $prog ($app)" {
+        try {
+          if (-not (Test-Path $key)) { New-Item -Path $key -Force | Out-Null }
+          # Windows will validate hash; if mismatch it may revert, but try
+          if ($hash) {
+            Set-ItemProperty -Path $key -Name ProgId -Value $prog -Force
+            Set-ItemProperty -Path $key -Name Hash -Value $hash -Force
+          } else {
+            Set-ItemProperty -Path $key -Name ProgId -Value $prog -Force
+          }
+        } catch {
+          # Fallback: try alternative registry path
+          $altKey = "HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\$id\UserChoice"
+          try {
+            if (-not (Test-Path $altKey)) { New-Item -Path $altKey -Force | Out-Null }
+            Set-ItemProperty -Path $altKey -Name ProgId -Value $prog -Force
+            if ($hash) { Set-ItemProperty -Path $altKey -Name Hash -Value $hash -Force }
+          } catch { Write-Warn "Set $id → $prog failed: $_" }
+        }
+      }
+    }
+    if (-not $DryRun) { Write-Ok "Per-user defaults attempted (Brave → http/https/html/pdf, ImageGlass → jpg/svg, Photos → png, etc.) — if Windows reverts, confirm once in Settings > Apps > Default apps" }
+  } catch { Write-Warn "Default apps per-user parse failed: $_" }
+} else {
+  Write-Warn "defaultapps/AppAssoc.xml not in repo — skip"
+}
+
+# ————— 9. Fonts & extras —————
 Write-Step "Polish"
 Write-Info "JetBrainsMono Nerd Font 3.3.0 should be installed via winget; set as Windows Terminal font (see terminal/settings.json)."
 Write-Info "zoxide is initialized in profile via: Invoke-Expression (& { (zoxide init powershell | Out-String) }) — run 'z <fuzzy>' after restart."
