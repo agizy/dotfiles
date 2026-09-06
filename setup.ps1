@@ -72,7 +72,7 @@ try { Set-ExecutionPolicy Bypass -Scope Process -Force -ErrorAction SilentlyCont
 # ————— 1. Packages —————
 if (-not $OnlyConfigs -and -not $NoPackages) {
   # — winget
-  Write-Step "Winget packages (44 pinned)"
+  Write-Step "Winget packages (42 pinned)"
   $wingetJson = Join-Path $RepoRoot "winget/packages.json"
   if (Test-Command winget -and (Test-Path $wingetJson)) {
     Invoke-Maybe "winget import -i $wingetJson --accept-package-agreements --accept-source-agreements" {
@@ -568,3 +568,4 @@ else {
   Write-Host "   Secrets: [System.Environment]::SetEnvironmentVariable('GITHUB_PERSONAL_ACCESS_TOKEN','ghp_...','User')" -ForegroundColor DarkGray
 }
 Write-Host ""
+
