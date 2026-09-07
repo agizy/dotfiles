@@ -98,11 +98,27 @@ dotfiles/
 
 # force overwrite without backup
 .\setup.ps1 -Force
+
+# interactive menu (no args) — prompt Install vs Undo
+.\setup.ps1
+# → 1. Install / Setup  2. Undo / Restore  3. Exit
+# → Undo submenu: All, Brave, Dev Tools (Terminal/PowerShell/Fastfetch), 
+#   Windows (wallpaper/default apps/DNS with/without O&O), O&O only, 
+#   Wallpaper/DefaultApps/DNS/Syncthing/ani-cli
+
+# non-interactive undo — no prompt
+.\setup.ps1 -Mode Undo -UndoCategory All -DryRun        # preview
+.\setup.ps1 -Mode Undo -UndoCategory Brave -Force       # no confirm
+.\setup.ps1 -Mode Undo -UndoCategory DevTools
+.\setup.ps1 -Mode Undo -UndoCategory WindowsWithOO      # wallpaper+defaultapps+DNS+O&O
+.\setup.ps1 -Mode Undo -UndoCategory WindowsWithoutOO   # wallpaper+defaultapps+DNS
+.\setup.ps1 -Mode Undo -UndoCategory OO                 # O&O only
+.\setup.ps1 -Mode Install -DryRun                       # explicit install
 ```
 
-Options: `-DryRun`, `-Force`, `-OnlyConfigs`, `-NoPackages`, `-NoSyncthing`
+Options: `-DryRun`, `-Force`, `-OnlyConfigs`, `-NoPackages`, `-NoSyncthing`, `-Mode {Install|Undo}`, `-UndoCategory {All|Brave|DevTools|WindowsWithOO|WindowsWithoutOO|OO|Wallpaper|DefaultApps|DNS|Syncthing|AniCli}`, `-NonInteractive`
 
-Re-run any time — idempotent. Backups are written as `*.bak.<yyyyMMdd_HHmmss>`.
+Re-run any time — idempotent. Backups are written as `*.bak.<yyyyMMdd_HHmmss>`. Undo restores `*.bak.*` where exists; registry (Brave debloat `HKLM\...\Brave`, O&O `~150` policies, DNS `194.242.2.6` DoH) is removed/reset, firewall `Private`→removed, task `Limited`→removed.
 
 ---
 

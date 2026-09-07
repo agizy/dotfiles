@@ -19,11 +19,215 @@ param(
   [switch]$Force,
   [switch]$OnlyConfigs,
   [switch]$NoPackages,
-  [switch]$NoSyncthing
+  [switch]$NoSyncthing,
+  [ValidateSet("Install","Undo","")]
+  [string]$Mode = "",
+  [string]$UndoCategory = "",
+  [switch]$NonInteractive
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+
+# ————— interactive menu —————
+function Show-MainMenu {
+  Clear-Host
+  Write-Host " ♡ dotfiles — agizy — 18 steps" -ForegroundColor Magenta
+  Write-Host "   1. Install / Setup (usual)" -ForegroundColor Cyan
+  Write-Host "   2. Undo / Restore" -ForegroundColor Yellow
+  Write-Host "   3. Exit" -ForegroundColor DarkGray
+  Write-Host ""
+  $choice = Read-Host "Select [1-3] (default 1)"
+  if (-not $choice) { $choice = "1" }
+  return $choice
+}
+function Show-UndoMenu {
+  Clear-Host
+  Write-Host " ↩ Undo / Restore — choose category" -ForegroundColor Yellow
+  Write-Host "   1. All changes" -ForegroundColor Red
+  Write-Host "   2. Brave (debloat, config, extensions, default browser)" -ForegroundColor Cyan
+  Write-Host "   3. Dev Tools (Terminal, PowerShell, Fastfetch, PS modules)" -ForegroundColor Green
+  Write-Host "   4. Windows Settings (wallpaper, default apps, DNS, with O&O)" -ForegroundColor Magenta
+  Write-Host "   5. Windows Settings without O&O (wallpaper, default apps, DNS)" -ForegroundColor Magenta
+  Write-Host "   6. Organization / O&O ShutUp10++ only" -ForegroundColor Yellow
+  Write-Host "   7. Wallpaper only" -ForegroundColor DarkGray
+  Write-Host "   8. Default Apps only" -ForegroundColor DarkGray
+  Write-Host "   9. DNS only (Brave + Windows)" -ForegroundColor DarkGray
+  Write-Host "  10. Syncthing only" -ForegroundColor DarkGray
+  Write-Host "  11. ani-cli only" -ForegroundColor DarkGray
+  Write-Host "  12. Back to main menu" -ForegroundColor DarkGray
+  Write-Host ""
+  $c = Read-Host "Select [1-12] (default 12)"
+  if (-not $c) { $c = "12" }
+  return $c
+}
+function Restore-LatestBackup {
+  param([string]$Path)
+  $dir = Split-Path $Path -Parent
+  $name = Split-Path $Path -Leaf
+  $pattern = "$name.bak.*"
+  $latest = Get-ChildItem -Path $dir -Filter $pattern -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if ($latest) {
+    if ($DryRun) { Write-Host "   [DryRun] would restore $Path from $($latest.Name)" -ForegroundColor DarkYellow; return $true }
+    Copy-Item -LiteralPath $latest.FullName -Destination $Path -Force
+    Write-Host "   ↩ Restored $Path from $($latest.Name)" -ForegroundColor Green
+    return $true
+  } else {
+    Write-Host "   ! No backup for $Path" -ForegroundColor Yellow
+    return $false
+  }
+}
+
+# Auto-prompt if no explicit mode and interactive
+$hasExplicitMode = $PSBoundParameters.ContainsKey("Mode") -or $PSBoundParameters.ContainsKey("DryRun") -or $PSBoundParameters.ContainsKey("OnlyConfigs") -or $PSBoundParameters.ContainsKey("NoPackages") -or $PSBoundParameters.ContainsKey("NoSyncthing") -or $PSBoundParameters.ContainsKey("NonInteractive")
+if (-not $hasExplicitMode -and -not $NonInteractive -and [Environment]::UserInteractive -and $Host.Name -eq "ConsoleHost") {
+  $mainChoice = Show-MainMenu
+  switch ($mainChoice) {
+    "2" {
+      $undoChoice = Show-UndoMenu
+      switch ($undoChoice) {
+        "1" { $Mode = "Undo"; $UndoCategory = "All" }
+        "2" { $Mode = "Undo"; $UndoCategory = "Brave" }
+        "3" { $Mode = "Undo"; $UndoCategory = "DevTools" }
+        "4" { $Mode = "Undo"; $UndoCategory = "WindowsWithOO" }
+        "5" { $Mode = "Undo"; $UndoCategory = "WindowsWithoutOO" }
+        "6" { $Mode = "Undo"; $UndoCategory = "OO" }
+        "7" { $Mode = "Undo"; $UndoCategory = "Wallpaper" }
+        "8" { $Mode = "Undo"; $UndoCategory = "DefaultApps" }
+        "9" { $Mode = "Undo"; $UndoCategory = "DNS" }
+        "10" { $Mode = "Undo"; $UndoCategory = "Syncthing" }
+        "11" { $Mode = "Undo"; $UndoCategory = "AniCli" }
+        "12" { $Mode = ""; Write-Host "Back to main..." -ForegroundColor DarkGray; $mainChoice = Show-MainMenu; if ($mainChoice -eq "1") { $Mode = "Install" } else { exit 0 } }
+        default { $Mode = "Install" }
+      }
+    }
+    "3" { Write-Host "Exit." -ForegroundColor DarkGray; exit 0 }
+    default { $Mode = "Install" }
+  }
+}
+if ($Mode -eq "") { $Mode = "Install" }
+
+# Handle Undo mode early
+if ($Mode -eq "Undo") {
+  # Define undo helpers
+  function Undo-Brave {
+    Write-Host "`n↩ Undo Brave..." -ForegroundColor Cyan
+    if ($DryRun) { Write-Host "   [DryRun] would remove Brave debloat policies + ExtensionInstallForcelist at HKLM:\SOFTWARE\Policies\BraveSoftware\Brave" -ForegroundColor DarkYellow }
+    else {
+      $p = "HKLM:\SOFTWARE\Policies\BraveSoftware\Brave"
+      $keys = @("BraveRewardsDisabled","BraveWalletDisabled","BraveVPNDisabled","BraveAIChatEnabled","BraveStatsPingEnabled","BraveNewsDisabled","BraveTalkDisabled","TorDisabled","BraveP3AEnabled","UrlKeyedAnonymizedDataCollectionEnabled","SafeBrowsingExtendedReportingEnabled","MetricsReportingEnabled")
+      foreach ($k in $keys) { try { Remove-ItemProperty -Path $p -Name $k -ErrorAction SilentlyContinue; Write-Host "   - $k" -ForegroundColor DarkGray } catch {} }
+      try { Remove-ItemProperty -Path $p -Name "ExtensionInstallForcelist" -ErrorAction SilentlyContinue } catch {}
+      try { Remove-Item -Path "HKLM:\SOFTWARE\Policies\BraveSoftware\Brave\ExtensionInstallForcelist" -Recurse -ErrorAction SilentlyContinue; Write-Host "   - ExtensionInstallForcelist" -ForegroundColor DarkGray } catch {}
+      if ((Get-ChildItem $p -ErrorAction SilentlyContinue | Measure-Object).Count -eq 0) { try { Remove-Item $p -ErrorAction SilentlyContinue } catch {} }
+    }
+    Restore-LatestBackup -Path "$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\User Data\Local State" | Out-Null
+    Restore-LatestBackup -Path "$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\User Data\Default\Preferences" | Out-Null
+    Write-Host "   Brave debloat/config undone (restore backup if existed) — restart Brave" -ForegroundColor Green
+  }
+  function Undo-Terminal { Restore-LatestBackup -Path "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json" | Out-Null }
+  function Undo-PowerShell { Restore-LatestBackup -Path "$HOME\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1" | Out-Null; Restore-LatestBackup -Path "$HOME\Documents\PowerShell\Microsoft.PowerShell_profile.ps1" | Out-Null }
+  function Undo-Fastfetch {
+    Restore-LatestBackup -Path "$HOME\.config\fastfetch\config.jsonc" | Out-Null
+    Restore-LatestBackup -Path "$HOME\.config\fastfetch\config-no-nerd.jsonc" | Out-Null
+    Restore-LatestBackup -Path "$HOME\.config\fastfetch\gh0stzk-logo.txt" | Out-Null
+  }
+  function Undo-DevTools {
+    Write-Host "`n↩ Undo Dev Tools..." -ForegroundColor Green
+    Undo-Terminal; Undo-PowerShell; Undo-Fastfetch
+    Write-Host "   Dev tools (Terminal/PowerShell/Fastfetch) restored where backup existed" -ForegroundColor Green
+    Write-Host "   (PS modules PSReadLine/PSFzf and winget packages not uninstalled — remove manually if needed: Uninstall-Module PSFzf; winget uninstall ...)" -ForegroundColor DarkGray
+  }
+  function Undo-Wallpaper {
+    Write-Host "`n↩ Undo Wallpaper..." -ForegroundColor DarkGray
+    if ($DryRun) { Write-Host "   [DryRun] would restore wallpaper from backup or clear to default" -ForegroundColor DarkYellow; return }
+    if (Restore-LatestBackup -Path "$HOME\Pictures\Seongjin Park.jpg") {
+      $wp = "$HOME\Pictures\Seongjin Park.jpg"
+      try {
+        Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name Wallpaper -Value $wp -Force
+        Add-Type -MemberDefinition '[DllImport("user32.dll")] public static extern int SystemParametersInfo(int a,int b,string c,int d);' -Name WallpaperUndo -Namespace Win32 -ErrorAction SilentlyContinue | Out-Null
+        [Win32.WallpaperUndo]::SystemParametersInfo(20,0,$wp,3) | Out-Null
+        Write-Host "   Wallpaper restored → $wp" -ForegroundColor Green
+      } catch { Write-Host "   ! Restore wallpaper failed: $_" -ForegroundColor Yellow }
+    } else {
+      try { Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name Wallpaper -Value "" -Force; Write-Host "   No backup — cleared to default (set via Settings > Personalization)" -ForegroundColor Yellow } catch {}
+    }
+  }
+  function Undo-DefaultApps {
+    Write-Host "`n↩ Undo Default Apps..." -ForegroundColor DarkGray
+    if ($DryRun) { Write-Host "   [DryRun] would open Settings > Default apps > Reset" -ForegroundColor DarkYellow; return }
+    Write-Host "   Default apps were set via Dism AppAssoc.xml + per-user UserChoice" -ForegroundColor DarkGray
+    Write-Host "   Windows does not auto-backup UserChoice — to revert, open Settings > Apps > Default apps > Reset" -ForegroundColor Yellow
+    try { Start-Process "ms-settings:defaultapps" -ErrorAction SilentlyContinue | Out-Null } catch {}
+  }
+  function Undo-DNS {
+    Write-Host "`n↩ Undo DNS (Windows)..." -ForegroundColor DarkGray
+    if ($DryRun) { Write-Host "   [DryRun] would reset DNS to DHCP on Up adapters and remove DoH 194.242.2.6/2a07:e340::6" -ForegroundColor DarkYellow; return }
+    try {
+      $adapters = Get-NetAdapter | Where-Object Status -eq "Up" | Select-Object -ExpandProperty InterfaceIndex
+      foreach ($idx in $adapters) {
+        try { Set-DnsClientServerAddress -InterfaceIndex $idx -ResetServerAddresses -ErrorAction SilentlyContinue; Write-Host "   DNS reset to DHCP on index $idx" -ForegroundColor Green } catch { Write-Host "   ! Reset DNS $idx failed: $_" -ForegroundColor Yellow }
+        try { Get-DnsClientDohServerAddress -ServerAddress "194.242.2.6" -ErrorAction SilentlyContinue | Remove-DnsClientDohServerAddress -Force -ErrorAction SilentlyContinue } catch {}
+        try { Get-DnsClientDohServerAddress -ServerAddress "2a07:e340::6" -ErrorAction SilentlyContinue | Remove-DnsClientDohServerAddress -Force -ErrorAction SilentlyContinue } catch {}
+      }
+    } catch { Write-Host "   ! Undo DNS failed: $_" -ForegroundColor Yellow }
+    Write-Host "   Brave DNS remains in brave/Local State — restore backup or reinstall Brave to reset" -ForegroundColor DarkGray
+  }
+  function Undo-OO {
+    Write-Host "`n↩ Undo O&O ShutUp10++..." -ForegroundColor Yellow
+    if ($DryRun) { Write-Host "   [DryRun] would launch OOSU10.exe GUI to revert ~150 HKLM policies" -ForegroundColor DarkYellow; return }
+    Write-Host "   O&O sets ~150 HKLM\SOFTWARE\Policies keys" -ForegroundColor DarkGray
+    Write-Host "   Use O&O GUI to revert: run OOSU10.exe and choose 'Undo' or 'Default'" -ForegroundColor Yellow
+    $exe = Join-Path $env:TEMP "OOSU10.exe"
+    if (Test-Path $exe) { try { Start-Process $exe -Wait -ErrorAction SilentlyContinue | Out-Null } catch {} }
+    else { Write-Host "   Download OOSU10.exe from https://www.oo-software.com/en/shutup10 and run GUI" -ForegroundColor DarkGray }
+  }
+  function Undo-Syncthing {
+    Write-Host "`n↩ Undo Syncthing..." -ForegroundColor DarkGray
+    if ($DryRun) { Write-Host "   [DryRun] would remove ScheduledTask, Startup shortcut, Firewall, stop syncthing" -ForegroundColor DarkYellow; return }
+    try { Unregister-ScheduledTask -TaskName "Syncthing" -Confirm:$false -ErrorAction SilentlyContinue; Write-Host "   ScheduledTask Syncthing removed" -ForegroundColor Green } catch {}
+    try { Remove-Item -Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\Syncthing.lnk" -Force -ErrorAction SilentlyContinue; Write-Host "   Startup shortcut removed" -ForegroundColor Green } catch {}
+    try { Remove-NetFirewallRule -DisplayName "Syncthing*" -ErrorAction SilentlyContinue; Write-Host "   Firewall rule removed" -ForegroundColor Green } catch {}
+    try { Stop-Process -Name syncthing -Force -ErrorAction SilentlyContinue; Write-Host "   Syncthing stopped" -ForegroundColor Green } catch {}
+    Write-Host "   (config at %LOCALAPPDATA%\Syncthing and ~/Sync not deleted — remove manually if needed)" -ForegroundColor DarkGray
+  }
+  function Undo-AniCli {
+    Write-Host "`n↩ Undo ani-cli..." -ForegroundColor DarkGray
+    if ($DryRun) { Write-Host "   [DryRun] would remove ani-cli from ~/.local/bin and mpv shims" -ForegroundColor DarkYellow; return }
+    try { Remove-Item -Path "$HOME\.local\bin\ani-cli" -Force -ErrorAction SilentlyContinue; Remove-Item -Path "$HOME\.local\bin\ani-cli.ps1" -Force -ErrorAction SilentlyContinue; Remove-Item -Path "$HOME\.local\bin\ani-cli.cmd" -Force -ErrorAction SilentlyContinue; Write-Host "   ani-cli removed from ~/.local/bin" -ForegroundColor Green } catch {}
+    try { Remove-Item -Path "$HOME\bin\mpv.exe" -Force -ErrorAction SilentlyContinue; Remove-Item -Path "$HOME\bin\mpv.com" -Force -ErrorAction SilentlyContinue; Remove-Item -Path "$HOME\.local\bin\mpv.exe" -Force -ErrorAction SilentlyContinue; Write-Host "   mpv shims removed" -ForegroundColor Green } catch {}
+    Write-Host "   (aria2/mpv/yt-dlp via winget not uninstalled — winget uninstall aria2.aria2 if needed)" -ForegroundColor DarkGray
+  }
+  function Undo-All {
+    Undo-Brave; Undo-DevTools; Undo-Wallpaper; Undo-DefaultApps; Undo-DNS; Undo-OO; Undo-Syncthing; Undo-AniCli
+    Write-Host "`n   All categories attempted — check yellow ! above for manual steps" -ForegroundColor Green
+  }
+
+  Write-Host "`n↩ Undo mode — category: $UndoCategory" -ForegroundColor Yellow
+  if (-not $DryRun -and -not $Force) {
+    $confirm = Read-Host "Are you sure you want to undo $UndoCategory ? [y/N]"
+    if ($confirm -notin @("y","Y","yes","Yes")) { Write-Host "Aborted." -ForegroundColor DarkGray; exit 0 }
+  } else {
+    Write-Host "   [DryRun] would undo $UndoCategory — no confirmation needed" -ForegroundColor DarkYellow
+  }
+
+  switch ($UndoCategory) {
+    "All" { Undo-All }
+    "Brave" { Undo-Brave }
+    "DevTools" { Undo-DevTools }
+    "WindowsWithOO" { Undo-Wallpaper; Undo-DefaultApps; Undo-DNS; Undo-OO }
+    "WindowsWithoutOO" { Undo-Wallpaper; Undo-DefaultApps; Undo-DNS }
+    "OO" { Undo-OO }
+    "Wallpaper" { Undo-Wallpaper }
+    "DefaultApps" { Undo-DefaultApps }
+    "DNS" { Undo-DNS }
+    "Syncthing" { Undo-Syncthing }
+    "AniCli" { Undo-AniCli }
+    default { Write-Host "Unknown category $UndoCategory" -ForegroundColor Red; exit 1 }
+  }
+  Write-Host "`n✓ Undo $UndoCategory done — restart recommended for some changes" -ForegroundColor Green
+  exit 0
+}
 
 # ————— helpers —————
 function Write-Step($msg) { Write-Host "`n>> $msg" -ForegroundColor Cyan }
