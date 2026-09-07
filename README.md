@@ -189,4 +189,10 @@ MIT - see `LICENSE`.
 
 ## Credits
 
-Prompt structure translated from `~/.zshrc` gh0stzk style. Fastfetch gh0stzk logo from `gh0stzk/dotfiles`.
+* **Chris Titus Tech (christitus)** — [winutil](https://github.com/ChrisTitusTech/winutil) for the `irm | iex` one-liner pattern and the Brave debloat 12-policy `WPFTweaksBraveDebloat` (`BraveRewardsDisabled` etc.) copied in `setup.ps1:236` — the whole idea of a single-command Windows setup comes from winutil.
+* **gh0stzk** — [gh0stzk/dotfiles](https://github.com/gh0stzk/dotfiles) for the prompt (`PROMPT` `vcs_info` `dir_icon` `0xf015`/`0xe5fe`), `PSReadLine`/`PSFzf`/`zoxide`/`eza`/`bat` alias chain, and the `fastfetch` `gh0stzk-logo.txt` (`6026` bytes, `gh0stzk` ASCII) used in `fastfetch/config.jsonc:1`.
+* **Seongjin Park** — wallpaper `Seongjin Park.jpg` `5281757` bytes `SHA256 07386AE...` — original `seongjin-park-Ks3NL6OH36g-unsplash.jpg` via [Unsplash](https://unsplash.com/photos/Ks3NL6OH36g) (also as `Pictures/Seongjin Park.jpg` + 9 `AsusOLEDShifter` shifted variants). Used with Fill for all monitors via `SystemParametersInfo` `setup.ps1:640`.
+* **O&O Software** — [O&O ShutUp10++](https://www.oo-software.com/en/shutup10) `OOSU10.exe` `79 MB` `3.5.1130` and the `ooshutup10.cfg` `P001 +` export format (`ooshutup/OOSU10.cfg` `45077` + `ooshutup10.cfg` `3261` `91534...`).
+* **pystardust** — [ani-cli](https://github.com/pystardust/ani-cli) `5.0.4` `27689` bytes `#!/bin/sh` + deps `mpv` `fzf` `yt-dlp` `ffmpeg` `aria2` — `ani-cli/ani-cli:1` with `ani-cli.ps1`/`ani-cli.cmd` wrappers for `Git Bash -l`.
+* **Mullvad** — [Mullvad DNS](https://mullvad.net/en/help/dns-over-https-and-dns-over-tls) Family `194.242.2.6` / `2a07:e340::6` `https://family.dns.mullvad.net/dns-query` used both in Brave `brave/Local State:1` `dns_over_https` and Windows `Set-DnsClientDohServerAddress` `setup.ps1:800`.
+* **Others:** `ImageGlass` `10.0.906.0` for `.jpg/.svg`, `Syncthing` `2.1.3 Hafnium Hornet`, `Raycast` `2.2.0` + 7 Store extensions, `JetBrainsMono Nerd Font` `3.3.0`, `zoxide` `ajeetdsouza`, `fastfetch-cli`, `yt-dlp`, `aria2`, `Git for Windows` `bash`, and the whole dotfiles community for the `~\.local\bin` + `winget`/`choco` snapshot pattern.
