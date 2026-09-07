@@ -195,4 +195,32 @@ MIT - see `LICENSE`.
 * **O&O Software** — [O&O ShutUp10++](https://www.oo-software.com/en/shutup10) `OOSU10.exe` `79 MB` `3.5.1130` and the `ooshutup10.cfg` `P001 +` export format (`ooshutup/OOSU10.cfg` `45077` + `ooshutup10.cfg` `3261` `91534...`).
 * **pystardust** — [ani-cli](https://github.com/pystardust/ani-cli) `5.0.4` `27689` bytes `#!/bin/sh` + deps `mpv` `fzf` `yt-dlp` `ffmpeg` `aria2` — `ani-cli/ani-cli:1` with `ani-cli.ps1`/`ani-cli.cmd` wrappers for `Git Bash -l`.
 * **Mullvad** — [Mullvad DNS](https://mullvad.net/en/help/dns-over-https-and-dns-over-tls) Family `194.242.2.6` / `2a07:e340::6` `https://family.dns.mullvad.net/dns-query` used both in Brave `brave/Local State:1` `dns_over_https` and Windows `Set-DnsClientDohServerAddress` `setup.ps1:800`.
-* **Others:** `ImageGlass` `10.0.906.0` for `.jpg/.svg`, `Syncthing` `2.1.3 Hafnium Hornet`, `Raycast` `2.2.0` + 7 Store extensions, `JetBrainsMono Nerd Font` `3.3.0`, `zoxide` `ajeetdsouza`, `fastfetch-cli`, `yt-dlp`, `aria2`, `Git for Windows` `bash`, and the whole dotfiles community for the `~\.local\bin` + `winget`/`choco` snapshot pattern.
+* **ImageGlass** — [ImageGlass](https://imageglass.org) `10.0.906.0` ([GitHub](https://github.com/d2phap/ImageGlass)) for `.jpg/.svg` default apps
+* **Syncthing** — [Syncthing](https://syncthing.net) `2.1.3 Hafnium Hornet` ([GitHub](https://github.com/syncthing/syncthing)) continuous file sync
+* **Raycast** — [Raycast](https://www.raycast.com) `2.2.0` + 7 Store extensions (Spotify, Translate, etc.)
+* **JetBrains Mono + Nerd Fonts** — [JetBrains Mono](https://www.jetbrains.com/mono) + [Nerd Fonts](https://github.com/ryanoasis/nerd-fonts) `3.3.0` patched for `Windows Terminal` `One Half Dark`
+* **zoxide** — [zoxide](https://github.com/ajeetdsouza/zoxide) `0.10.0` smarter `cd` (`z`, `zi`)
+* **fastfetch** — [fastfetch](https://github.com/fastfetch-cli/fastfetch) `2.68.1` system info + `gh0stzk` ASCII
+* **yt-dlp** — [yt-dlp](https://github.com/yt-dlp/yt-dlp) `2026.07.04` + [FFmpeg](https://ffmpeg.org) `9.0.1` / [yt-dlp FFmpeg](https://github.com/yt-dlp/FFmpeg-Builds) for `mpv`/`ani-cli`
+* **aria2** — [aria2](https://aria2.github.io) `1.37.0` download utility for `ani-cli -d`
+* **mpv** — [mpv](https://mpv.io) (`[GitHub](https://github.com/mpv-player/mpv)`) `v0.41.0` player for `ani-cli`
+* **fzf** — [fzf](https://github.com/junegunn/fzf) `0.74.3` fuzzy finder for `ani-cli`/`PSFzf`
+* **ripgrep** — [ripgrep](https://github.com/BurntSushi/ripgrep) `15.2.0` (`rg` → `grep`)
+* **bat** — [bat](https://github.com/sharkdp/bat) `cat` replacement (`bat --theme=base16`)
+* **eza** — [eza](https://github.com/eza-community/eza) `ls`/`ll` with icons
+* **PowerShell + PSReadLine + PSFzf** — [PowerShell](https://github.com/PowerShell/PowerShell) + [PSReadLine](https://github.com/PowerShell/PSReadLine) + [PSFzf](https://github.com/kelleyma49/PSFzf) for history/substring/search
+* **Windows Terminal** — [Windows Terminal](https://github.com/microsoft/terminal) `1.24.11911.0`
+* **Git for Windows** — [Git for Windows](https://gitforwindows.org) ([GitHub](https://github.com/git-for-windows/git)) `2.55.0` + `bash` for `ani-cli`
+* **Node.js** — [Node.js](https://nodejs.org) `24.19.0 LTS` + [Deno](https://deno.land) `2.9.6`
+* **Brave** — [Brave](https://brave.com) `152.1.94.121` + [Brave GitHub](https://github.com/brave/brave-browser)
+* **Zen Browser** — [Zen Browser](https://zen-browser.app) `1.21.16b`
+* **VLC** — [VLC](https://www.videolan.org/vlc) `3.0.23`
+* **LocalSend** — [LocalSend](https://localsend.org) ([GitHub](https://github.com/localsend/localsend)) `1.17.0`
+* **KDE Connect** — [KDE Connect](https://kdeconnect.kde.org) `26.04.2`
+* **Steam** — [Steam](https://store.steampowered.com) `2.10.91.91`
+* **Epic Games** — [Epic Games Store](https://store.epicgames.com) + [Epic Online Services](https://dev.epicgames.com/docs/epic-online-services)
+* **Malwarebytes** — [Malwarebytes](https://www.malwarebytes.com) `5.6.5.306`
+* **Transmission** — [Transmission](https://transmissionbt.com) ([GitHub](https://github.com/transmission/transmission)) `4.1.3`
+* **Unified Remote** — [Unified Remote](https://www.unifiedremote.com) `3.13.0`
+* **FFmpeg** — [FFmpeg](https://ffmpeg.org) `9.0.1` ([gyan.dev builds](https://www.gyan.dev/ffmpeg/builds/))
+* **Dotfiles community** — `~\.local\bin` + `winget`/`choco` snapshot pattern and the whole r/unixporn & GitHub dotfiles inspiration
