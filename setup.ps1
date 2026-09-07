@@ -32,9 +32,6 @@ try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding 
 # ————— log —————
 $global:DotfilesLog = "$env:TEMP\dotfiles_setup_$(Get-Date -Format yyyyMMdd_HHmmss).log"
 try { Start-Transcript -Path $global:DotfilesLog -Force | Out-Null; Write-Host "   Log: $global:DotfilesLog" -ForegroundColor DarkGray } catch {}
-# ————— version —————
-$global:DotfilesVersion = "1.0.0"
-if (Test-Path (Join-Path $RepoRoot "VERSION")) { try { $global:DotfilesVersion = (Get-Content (Join-Path $RepoRoot "VERSION") -Raw).Trim() } catch {} }
 
 # ————— interactive menu —————
 function Show-MainMenu {
@@ -356,7 +353,10 @@ function Write-Warn($msg) {
 # Resolve repo root (where this script lives)
 $RepoRoot = $PSScriptRoot
 if (-not $RepoRoot) { $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path }
-Write-Step "Repo root: $RepoRoot"
+# ————— version —————
+$global:DotfilesVersion = "1.0.0"
+if (Test-Path (Join-Path $RepoRoot "VERSION")) { try { $global:DotfilesVersion = (Get-Content (Join-Path $RepoRoot "VERSION") -Raw).Trim() } catch {} }
+Write-Step "Repo root: $RepoRoot (v$global:DotfilesVersion)"
 if (-not (Test-Path (Join-Path $RepoRoot "winget/packages.json"))) {
   Write-Warn "winget/packages.json not found — are you running from cloned repo?"
 }
