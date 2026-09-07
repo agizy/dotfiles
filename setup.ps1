@@ -28,6 +28,13 @@ param(
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; chcp 65001 | Out-Null } catch {}
+# ————— log —————
+$global:DotfilesLog = "$env:TEMP\dotfiles_setup_$(Get-Date -Format yyyyMMdd_HHmmss).log"
+try { Start-Transcript -Path $global:DotfilesLog -Force | Out-Null; Write-Host "   Log: $global:DotfilesLog" -ForegroundColor DarkGray } catch {}
+# ————— version —————
+$global:DotfilesVersion = "1.0.0"
+if (Test-Path (Join-Path $RepoRoot "VERSION")) { try { $global:DotfilesVersion = (Get-Content (Join-Path $RepoRoot "VERSION") -Raw).Trim() } catch {} }
 
 # ————— interactive menu —————
 function Show-MainMenu {
@@ -365,7 +372,7 @@ try { Set-ExecutionPolicy Bypass -Scope Process -Force -ErrorAction SilentlyCont
 # ————— 1. Packages —————
 if (-not $OnlyConfigs -and -not $NoPackages) {
   # — winget
-  Write-Step "Winget packages (42 pinned)"
+  Write-Step "Winget packages (34 pinned)"
   $wingetJson = Join-Path $RepoRoot "winget/packages.json"
   if (Test-Command winget -and (Test-Path $wingetJson)) {
     Invoke-Maybe "winget import -i $wingetJson --accept-package-agreements --accept-source-agreements" {
@@ -942,6 +949,17 @@ public class Wallpaper {
 Write-Step "Default Apps — import AppAssoc.xml (Brave, ImageGlass, etc.)"
 $appAssocSrc = Join-Path $RepoRoot "defaultapps\AppAssoc.xml"
 if (Test-Path $appAssocSrc) {
+  # Snapshot current UserChoice for undo (per-user)
+  $snapDir = "$HOME\.config\dotfiles_backups"
+  Ensure-Dir $snapDir
+  $snapFile = Join-Path $snapDir "UserChoice_$(Get-Date -Format yyyyMMdd_HHmmss).reg"
+  try {
+    if (-not $DryRun) {
+      reg export "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts" "$snapFile.FileExts.reg" /y 2>$null | Out-Null
+      reg export "HKCU\Software\Microsoft\Windows\Shell\Associations\UrlAssociations" "$snapFile.UrlAssociations.reg" /y 2>$null | Out-Null
+      if (Test-Path "$snapFile.FileExts.reg") { Write-Info "Snapshot UserChoice → $snapFile.*.reg" }
+    } else { Write-Host "   [DryRun] would snapshot UserChoice → $snapFile.*.reg" -ForegroundColor DarkYellow }
+  } catch { Write-Warn "Snapshot UserChoice failed: $_" }
   # 1) Machine-wide via Dism (requires admin) — sets OEM defaults for new users and can set current image
   if (-not $DryRun) {
     $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -1189,4 +1207,5 @@ if ($global:DotfilesProgressErrors -gt 0) {
   Show-CuteProgress -Msg "All done" -Final
 }
 Write-Host ""
+
 

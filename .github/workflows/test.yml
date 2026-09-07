@@ -1,0 +1,31 @@
+﻿name: test
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  dryrun:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify hashes
+        shell: pwsh
+        run: |
+          $h = Get-FileHash setup.ps1 -Algorithm SHA256
+          Write-Host "setup.ps1 $($h.Hash)"
+          Get-FileHash wallpaper/wallpaper.jpg -Algorithm SHA256
+          Get-FileHash ooshutup/ooshutup10.cfg -Algorithm SHA256
+          Get-FileHash ani-cli/ani-cli -Algorithm SHA256
+      - name: Setup DryRun (no changes)
+        shell: pwsh
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File ./setup.ps1 -DryRun
+          if ($LASTEXITCODE -ne 0) { throw "DryRun failed $LASTEXITCODE" }
+      - name: Check no secrets
+        shell: pwsh
+        run: |
+          if (Select-String -Path setup.ps1,bootstrap.ps1,powershell/* -Pattern "ghp_[A-Za-z0-9]{30,}") { throw "leaked token" }
+          Write-Host "no secrets"
